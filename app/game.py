@@ -1,36 +1,79 @@
 from flask import Blueprint, request, jsonify
 from .model import GameStatus, Game
 from .model import socketio, db, redis_client
-import click
+from .auth import verify_token
+from .exchange import process_order, cancel_order, cancel_all_orders
 
 game = Blueprint('game', __name__)
+
+@game.route('/snapshot', methods=['POST'])
+def snapshot():
+    data = request.json
+    token = data["token"]
+    
+    verify_player = verify_token(token, "player")
+    if verify_player is not None:
+        _, player = verify_player
+        return jsonify({
+            "name": player.username,
+            "orderbook": redis_client.hgetall(f"{player.game_id}:orderbook")
+        }), 201
+
+    verify_admin = verify_token(token, "admin")
+    if verify_admin is not None:
+        _, game = verify_admin
+        return jsonify({"code": game.code}), 201
+    
+    return jsonify({"error": "Invalid request"}), 404
 
 @socketio.on("message", namespace="/admin")
 def admin_broadcast(message):
     """Broadcast a message to all connected clients."""
-    socketio.emit("message", "[admin] " + message, namespace="/admin")
-    socketio.emit("message", "[admin] " + message, namespace="/player")
-    print("Message broadcasted.")
+    game_id = int(redis_client.hget("socket_admins", request.sid))
+    socketio.emit("message", "[admin] " + message, 
+                  namespace="/admin", room=game_id)
+    socketio.emit("message", "[admin] " + message, 
+                  namespace="/player", room=game_id)
 
-@socketio.on("buy", namespace="/player")
-def buy(price, amount):
-    socketio.emit("update", price, namespace="/player")
-    socketio.emit("update", price, namespace="/admin")
+@socketio.on("order", namespace="/player")
+def new_order(order_type, price, amount):
+    if not isinstance(amount, int) or amount > 1000:
+        return
 
-    message = str(redis_client.get(request.sid)) + f" bought {amount} at {price}"
-    socketio.emit("message", message, namespace="/admin")
+    player_id = int(redis_client.hget("socket_users", request.sid))
+    game_id = int(redis_client.hget("socket_games", request.sid))
 
-@socketio.on("sell", namespace="/player")
-def sell(price, amount):
-    message = str(redis_client.get(request.sid)) + f" sold {amount} at {price}"
-    socketio.emit("message", message, namespace="/admin")
+    updates, mrp = process_order(game_id, player_id, order_type, price, amount)
+
+    socketio.emit("orderbook", updates,
+                  namespace="/player", room=game_id)
+    if mrp is not None:
+        socketio.emit("price", mrp,
+                      namespace="/player", room=game_id)
+
+    socketio.emit("message", f"{player_id}: {order_type} {amount} at {price}", 
+                  namespace="/admin", room=game_id)
 
 @socketio.on("cancel", namespace="/player")
 def cancel(price):
-    message = str(redis_client.get(request.sid)) + f" canceled orders at {price}"
-    socketio.emit("message", message, namespace="/admin")
+    player_id = int(redis_client.hget("socket_users", request.sid))
+    game_id = int(redis_client.hget("socket_games", request.sid))
+
+    updates = cancel_order(game_id, player_id, price)
+    socketio.emit("orderbook", updates,
+                  namespace="/player", room=game_id)
+
+    socketio.emit("message", f"{player_id}: canceled at {price}", 
+                  namespace="/admin", room=game_id)
 
 @socketio.on("cancel_all", namespace="/player")
-def kill():
-    message = str(redis_client.get(request.sid)) + " canceled everything"
-    socketio.emit("message", message, namespace="/admin")
+def cancel_all():
+    player_id = int(redis_client.hget("socket_users", request.sid))
+    game_id = int(redis_client.hget("socket_games", request.sid))
+
+    updates = cancel_all_orders(game_id, player_id)
+    socketio.emit("orderbook", updates,
+                  namespace="/player", room=game_id)
+
+    socketio.emit("message", f"{player_id}: canceled everything", 
+                  namespace="/admin", room=game_id)

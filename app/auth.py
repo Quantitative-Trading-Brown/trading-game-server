@@ -1,70 +1,65 @@
 from flask import Blueprint, request, jsonify
-from flask_socketio import disconnect
+from flask_socketio import disconnect, join_room
 from .model import socketio, db, redis_client
 from .model import GameStatus, Game, Player
 from werkzeug.exceptions import Unauthorized
 
 auth = Blueprint('auth', __name__)
 
-@auth.route('/verify-player', methods=['POST'])
-def verify_player():
-    data = request.json
-    token = data.get('token')
-    
+def verify_token(token, force_type = None):
+    """
+    Returns player object if user_type is player otherwise game object if user_type is admin
+    """
+    token_components = token.split("-")
+    auth_type = force_type if force_type is not None else token_components[0]
     try:
-        pid = token.split("-")[0]
-        player = db.session.get(Player, pid)
-        if token == player.token:
-            return jsonify({"name": player.username}), 201
+        if auth_type != token_components[0]:
+            return None
+        elif auth_type == "player":
+            pid = token_components[1]
+            auth_obj = db.session.get(Player, pid)
+        elif auth_type == "admin":
+            gid = token_components[1]
+            auth_obj = db.session.get(Game, gid)
         else:
-            return jsonify({"error": "Unauthorized"}), 404
-    except:
-        return jsonify({"error": "Unauthorized"}), 404
+            return None
+
+        return (auth_type, auth_obj) if auth_obj and token == auth_obj.token else None
+    except Exception as e:
+        print("Authentication error:", e)
+        return None
 
 @socketio.on('connect', namespace="/player")
 def player_connect():
     # Extract token from the query parameters
     token = request.args.get('token')
+    verify = verify_token(token, "player")
 
-    try:
-        pid = token.split("-")[0]
-        player = db.session.get(Player, pid)
-        if player and token == player.token:
-            redis_client.set(request.sid, pid)
-            socketio.emit('message', 'You are authenticated and connected!', namespace="/player", to=request.sid)
-        else:
-            disconnect()
-    except Exception as e:
-        print(e)
+    if verify is not None:
+        _, player = verify
+        join_room(player.game_id)
+        redis_client.hset("socket_users", request.sid, player.pid)
+        redis_client.hset("socket_games", request.sid, player.game_id)
+        socketio.emit('message', 'You are authenticated and connected!', 
+                      namespace="/player", to=request.sid, room=player.game_id)
+    else:
         disconnect()
-
-@auth.route('/verify-admin', methods=['POST'])
-def verify_admin():
-    data = request.json
-    token = data.get('token')
-    
-    try:
-        gid = token.split("-")[0]
-        game = db.session.get(Game, gid)
-        if game and token == game.token:
-            return jsonify({"code": game.code}), 201
-        else:
-            return jsonify({"error": "Unauthorized"}), 404
-    except:
-        return jsonify({"error": "Unauthorized"}), 404
 
 @socketio.on('connect', namespace="/admin")
 def admin_connect():
     # Extract token from the query parameters
     token = request.args.get('token')
-
-    try:
-        gid = token.split("-")[0]
-        game = db.session.get(Game, gid)
-        if token == game.token:
-            socketio.emit('message', f'You are authenticated and connected!', 
-                          namespace="/admin", to=request.sid)
-        else:
-            disconnect()
-    except:
+    verify = verify_token(token, "admin")
+    
+    if verify is not None:
+        _, game = verify
+        join_room(game.gid)
+        redis_client.hset("socket_admins", request.sid, game.gid)
+        socketio.emit('message', f'You are authenticated and connected!', 
+                      namespace="/admin", to=request.sid, room=game.gid)
+    else:
         disconnect()
+
+@socketio.on('disconnect', namespace='/player')
+def player_disconnect():
+    redis_client.hdel("users", request.sid)

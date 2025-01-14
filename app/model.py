@@ -5,7 +5,7 @@ from flask_socketio import SocketIO
 from flask_redis import FlaskRedis
 
 db = SQLAlchemy()
-socketio = SocketIO(cors_allowed_origins=["http://localhost:3000"])
+socketio = SocketIO(cors_allowed_origins=["http://localhost:3000", "http://192.168.1.23:3000"])
 redis_client = FlaskRedis(decode_responses=True)
 
 class GameStatus(enum.Enum):
@@ -30,6 +30,7 @@ class Player(db.Model):
 
 class Trade(db.Model):
     tid = db.Column(db.Integer, primary_key=True)
+    game_id = db.Column(db.Integer, db.ForeignKey('game.gid'))
 
     buyer_id = db.Column(db.Integer, db.ForeignKey('player.pid'))
     seller_id = db.Column(db.Integer, db.ForeignKey('player.pid'))
@@ -37,6 +38,6 @@ class Trade(db.Model):
     buyer = db.relationship("Player", backref="buyer", uselist=False, foreign_keys=[buyer_id])
     seller = db.relationship("Player", backref="seller", uselist=False, foreign_keys=[seller_id])
 
-    game_id = db.Column(db.Integer, db.ForeignKey('game.gid'))
 
     price = db.Column(db.Double)
+    amount = db.Column(db.Double)

@@ -6,7 +6,7 @@ import binascii
 from flask import Blueprint, request, jsonify
 from .model import GameStatus, Game, Player, db
 
-main = Blueprint('main', __name__)
+home = Blueprint('home', __name__)
 
 def generate_code(length=6):
     """Generate a random alphanumeric game code."""
@@ -16,7 +16,7 @@ def generate_token(prefix, length=32):
     """Generate a random token."""
     return prefix + binascii.hexlify(secrets.token_bytes(length)).decode('utf-8')
 
-@main.route('/create-game', methods=['POST'])
+@home.route('/create-game', methods=['POST'])
 def create_game():
     cur_games = Game.query.filter(
         Game.status.in_([GameStatus.LOBBY, 
@@ -33,12 +33,12 @@ def create_game():
     db.session.add(new_game)
     db.session.commit()
 
-    new_game.token = generate_token(prefix=f"{new_game.gid}-")
+    new_game.token = generate_token(prefix=f"admin-{new_game.gid}-")
     db.session.commit()
 
     return jsonify({"code": code, "token": new_game.token}), 201
 
-@main.route('/join-game', methods=['POST'])
+@home.route('/join-game', methods=['POST'])
 def join_game():
     cur_games = Game.query.filter(
         Game.status.in_([GameStatus.LOBBY, 
@@ -67,7 +67,7 @@ def join_game():
     db.session.add(new_user)
     db.session.commit()
 
-    new_user.token = generate_token(prefix=f"{new_user.pid}-")
+    new_user.token = generate_token(prefix=f"player-{new_user.pid}-")
     db.session.commit()
     
     return jsonify({"message": "Joined successfully", 
