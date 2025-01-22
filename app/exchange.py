@@ -16,9 +16,11 @@ def process_order(game_id, player_id, order_type, price, amount):
     :return                 : A list of trades (buyer, seller, price, amount).
     """
     # In the Redis storage, prices for bids in the sorted set are negative to facilitate sorting
-    # Prices in order details and amounts everywhere are always positive
+    # Prices in order details are always positive
     trades = []
-    updates = defaultdict(int)
+    orderbook_updates = defaultdict(int)
+    inventory_updates = defaultdict(dict)
+
     remaining_amount = amount
     orderbook_key = f"{game_id}:orderbook"
     user_orders_key = f"{game_id}:{player_id}:orders"
@@ -48,21 +50,20 @@ def process_order(game_id, player_id, order_type, price, amount):
         trade_amount = min(remaining_amount, avail_amount)
 
         # Execute the trade
-        trades.append(
-            Trade(
-                game_id = game_id, 
-                buyer_id = player_id if order_type == 'BUY' else counterparty_id, 
-                seller_id = player_id if order_type == 'SELL' else counterparty_id, 
-                price = trade_price, 
-                amount = trade_amount
-            )
+        new_trade = Trade(
+            game_id = game_id, 
+            buyer_id = player_id if order_type == 'BUY' else counterparty_id, 
+            seller_id = player_id if order_type == 'SELL' else counterparty_id, 
+            price = trade_price, 
+            amount = trade_amount
         )
-        remaining_amount -= trade_amount
+
+        trades.append(new_trade)
 
         # Create updates for the client
         update_amount = trade_amount if order_type == 'BUY' else -trade_amount
         new_amount = redis_client.hincrby(f"{game_id}:orderbook", trade_price, update_amount)
-        updates[trade_price] = new_amount
+        orderbook_updates[trade_price] = new_amount
 
         # Update amount in orderbook if old order residual exists, else knock it out completely
         if avail_amount > trade_amount:
@@ -71,6 +72,26 @@ def process_order(game_id, player_id, order_type, price, amount):
             redis_client.zrem(counterparty_orders_key, best_order_id)
             redis_client.zrem(opposite_set_key, best_order_id)
             redis_client.delete(best_order_id)
+        
+        # Update users' positions
+
+        new_amount = redis_client.hincrby(f"user:{new_trade.buyer_id}", "asset:cash", 
+                                          -trade_price * trade_amount)
+        inventory_updates[new_trade.buyer_id]["cash"] = new_amount
+
+        new_amount = redis_client.hincrby(f"user:{new_trade.buyer_id}", "asset:security", 
+                                          trade_amount)
+        inventory_updates[new_trade.buyer_id]["security"] = new_amount
+
+        new_amount = redis_client.hincrby(f"user:{new_trade.seller_id}", "asset:cash", 
+                                          trade_price * trade_amount)
+        inventory_updates[new_trade.seller_id]["cash"] = new_amount
+
+        new_amount = redis_client.hincrby(f"user:{new_trade.seller_id}", "asset:security", 
+                                          -trade_amount)
+        inventory_updates[new_trade.seller_id]["security"] = new_amount
+
+        remaining_amount -= trade_amount
 
     # Put in new order if there is residual in the new order
     if remaining_amount > 0:
@@ -93,16 +114,16 @@ def process_order(game_id, player_id, order_type, price, amount):
 
         update_amount = remaining_amount if order_type == 'BUY' else -remaining_amount
         new_amount = redis_client.hincrby(f"{game_id}:orderbook", price, update_amount)
-        updates[price] = new_amount
+        orderbook_updates[price] = new_amount
 
     db.session.add_all(trades)
     db.session.commit()
 
     mrp = trades[-1].price if trades else None
-    return updates, mrp
+    return orderbook_updates, inventory_updates, mrp
 
 def cancel_order(game_id, player_id, price):
-    updates = defaultdict(int)
+    orderbook_updates = defaultdict(int)
 
     user_orders_key = f"{game_id}:{player_id}:orders"
     user_orders = redis_client.zrangebyscore(user_orders_key, price, price)
@@ -116,15 +137,15 @@ def cancel_order(game_id, player_id, price):
 
         update_amount = -order_amount if order_side == 'bids' else order_amount
         new_amount = redis_client.hincrby(f"{game_id}:orderbook", price, update_amount)
-        updates[price] = new_amount
+        orderbook_updates[price] = new_amount
 
         redis_client.zrem(side_key, order_id)
         redis_client.zrem(user_orders_key, order_id)
         redis_client.delete(order_id)
-    return updates
+    return orderbook_updates
 
 def cancel_all_orders(game_id, player_id):
-    updates = defaultdict(int)
+    orderbook_updates = defaultdict(int)
 
     user_orders_key = f"{game_id}:{player_id}:orders"
     user_orders = redis_client.zrange(user_orders_key, 0, -1)
@@ -139,11 +160,11 @@ def cancel_all_orders(game_id, player_id):
 
         update_amount = -order_amount if order_side == 'bids' else order_amount
         new_amount = redis_client.hincrby(f"{game_id}:orderbook", order_price, update_amount)
-        updates[order_price] = new_amount
+        orderbook_updates[order_price] = new_amount
 
         redis_client.zrem(side_key, order_id)
         redis_client.delete(order_id)
 
     redis_client.delete(user_orders_key)
 
-    return updates
+    return orderbook_updates

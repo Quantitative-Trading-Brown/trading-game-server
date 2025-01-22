@@ -2,7 +2,6 @@ from flask import Blueprint, request, jsonify
 from flask_socketio import disconnect, join_room
 from .model import socketio, db, redis_client
 from .model import GameStatus, Game, Player
-from werkzeug.exceptions import Unauthorized
 
 auth = Blueprint('auth', __name__)
 
@@ -40,6 +39,7 @@ def player_connect():
         join_room(player.game_id)
         redis_client.hset("socket_users", request.sid, player.pid)
         redis_client.hset("socket_games", request.sid, player.game_id)
+        redis_client.hset(f"user:{player.pid}", "sid", request.sid)
         socketio.emit('message', 'You are authenticated and connected!', 
                       namespace="/player", to=request.sid, room=player.game_id)
     else:
@@ -55,11 +55,13 @@ def admin_connect():
         _, game = verify
         join_room(game.gid)
         redis_client.hset("socket_admins", request.sid, game.gid)
-        socketio.emit('message', f'You are authenticated and connected!', 
+        socketio.emit("news", f'You are authenticated and connected!', 
                       namespace="/admin", to=request.sid, room=game.gid)
     else:
         disconnect()
 
 @socketio.on('disconnect', namespace='/player')
 def player_disconnect():
+    player_id = redis_client.hget("users", request.sid)
+    redis_client.hdel(f"user:{player_id}", "sid")
     redis_client.hdel("users", request.sid)

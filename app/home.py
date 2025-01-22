@@ -4,7 +4,8 @@ import secrets
 import binascii
 
 from flask import Blueprint, request, jsonify
-from .model import GameStatus, Game, Player, db
+from .model import GameStatus, Game, Player
+from .model import db, redis_client
 
 home = Blueprint('home', __name__)
 
@@ -35,6 +36,8 @@ def create_game():
 
     new_game.token = generate_token(prefix=f"admin-{new_game.gid}-")
     db.session.commit()
+
+    redis_client.set(f"{new_game.gid}:state", 0)
 
     return jsonify({"code": code, "token": new_game.token}), 201
 
