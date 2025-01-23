@@ -28,6 +28,28 @@ def verify_token(token, force_type = None):
         print("Authentication error:", e)
         return None
 
+# This acts as a soft auth check on the frontend to see if a redirect is necessary
+@auth.route("/auth", methods=['POST'])
+def checkAuth():
+    data = request.json
+    token = data["token"]
+
+    verify_player = verify_token(token, "player")
+    if verify_player is not None:
+        return jsonify({
+            "type": "player"
+        }), 201
+    
+    verify_admin = verify_token(token, "admin")
+    if verify_admin is not None:
+        return jsonify({
+            "type": "admin"
+        }), 201
+
+    return jsonify({
+        "error": "Invalid token"
+    }), 404
+
 @socketio.on('connect', namespace="/player")
 def player_connect():
     # Extract token from the query parameters
@@ -41,7 +63,7 @@ def player_connect():
         redis_client.hset("socket_games", request.sid, player.game_id)
         redis_client.hset(f"user:{player.pid}", "sid", request.sid)
         socketio.emit('message', 'You are authenticated and connected!', 
-                      namespace="/player", to=request.sid, room=player.game_id)
+                      namespace="/player", to=request.sid)
     else:
         disconnect()
 
@@ -56,7 +78,7 @@ def admin_connect():
         join_room(game.gid)
         redis_client.hset("socket_admins", request.sid, game.gid)
         socketio.emit("news", f'You are authenticated and connected!', 
-                      namespace="/admin", to=request.sid, room=game.gid)
+                      namespace="/admin", to=request.sid)
     else:
         disconnect()
 

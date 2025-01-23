@@ -1,0 +1,63 @@
+from flask import Blueprint, request, jsonify
+from .model import GameStatus, Game, Player
+from .model import socketio, db, redis_client
+from .exchange import process_order, cancel_order, cancel_all_orders
+
+trading = Blueprint('trading', __name__)
+
+@socketio.on("order", namespace="/player")
+def new_order(order_type, price, amount):
+    if not isinstance(amount, int) or amount > 1000:
+        return
+
+    player_id = int(redis_client.hget("socket_users", request.sid))
+    game_id = int(redis_client.hget("socket_games", request.sid))
+
+    orderbook, inventory, mrp = process_order(game_id, player_id, order_type, price, amount)
+
+    socketio.emit("orderbook", orderbook,
+                  namespace="/player", to=game_id)
+    socketio.emit("orderbook", orderbook,
+                  namespace="/admin", to=game_id)
+
+    for trader_id, inv in inventory.items():
+        trader_sid = redis_client.hget(f"user:{trader_id}", "sid")
+        socketio.emit("inventory", inv,
+                      namespace="/player", to=trader_sid)
+
+    if mrp is not None:
+        socketio.emit("price", mrp,
+                      namespace="/player", to=game_id)
+        socketio.emit("price", mrp,
+                      namespace="/admin", to=game_id)
+
+    socketio.emit("message", f"{player_id}: {order_type} {amount} at {price}", 
+                  namespace="/admin", to=game_id)
+
+@socketio.on("cancel", namespace="/player")
+def cancel(price):
+    player_id = int(redis_client.hget("socket_users", request.sid))
+    game_id = int(redis_client.hget("socket_games", request.sid))
+
+    updates = cancel_order(game_id, player_id, price)
+    socketio.emit("orderbook", updates,
+                  namespace="/player", to=game_id)
+    socketio.emit("orderbook", updates,
+                  namespace="/admin", to=game_id)
+
+    socketio.emit("message", f"{player_id}: canceled at {price}", 
+                  namespace="/admin", to=game_id)
+
+@socketio.on("cancel_all", namespace="/player")
+def cancel_all():
+    player_id = int(redis_client.hget("socket_users", request.sid))
+    game_id = int(redis_client.hget("socket_games", request.sid))
+
+    updates = cancel_all_orders(game_id, player_id)
+    socketio.emit("orderbook", updates,
+                  namespace="/player", to=game_id)
+    socketio.emit("orderbook", updates,
+                  namespace="/admin", to=game_id)
+
+    socketio.emit("message", f"{player_id}: canceled everything", 
+                  namespace="/admin", to=game_id)

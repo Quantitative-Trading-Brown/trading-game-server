@@ -22,8 +22,8 @@ def process_order(game_id, player_id, order_type, price, amount):
     inventory_updates = defaultdict(dict)
 
     remaining_amount = amount
-    orderbook_key = f"{game_id}:orderbook"
-    user_orders_key = f"{game_id}:{player_id}:orders"
+    orderbook_key = f"game:{game_id}:orderbook"
+    user_orders_key = f"user:{player_id}:orders"
 
     order_set_key = f"{orderbook_key}:{'bids' if order_type == 'BUY' else 'asks'}"
     opposite_set_key = f"{orderbook_key}:{'asks' if order_type == 'BUY' else 'bids'}"

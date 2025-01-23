@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify
 from .model import GameStatus, Game, Player
 from .model import db, redis_client
 
-home = Blueprint('home', __name__)
+login = Blueprint('login', __name__)
 
 def generate_code(length=6):
     """Generate a random alphanumeric game code."""
@@ -17,7 +17,7 @@ def generate_token(prefix, length=32):
     """Generate a random token."""
     return prefix + binascii.hexlify(secrets.token_bytes(length)).decode('utf-8')
 
-@home.route('/create-game', methods=['POST'])
+@login.route('/create-game', methods=['POST'])
 def create_game():
     cur_games = Game.query.filter(
         Game.status.in_([GameStatus.LOBBY, 
@@ -27,7 +27,6 @@ def create_game():
     # Check if game code in SQL database
     while code in [g.code for g in cur_games]:
         code = generate_code()
-
 
     # Return the code and token
     new_game = Game(code=code, status=GameStatus.LOBBY)
@@ -41,7 +40,7 @@ def create_game():
 
     return jsonify({"code": code, "token": new_game.token}), 201
 
-@home.route('/join-game', methods=['POST'])
+@login.route('/join-game', methods=['POST'])
 def join_game():
     cur_games = Game.query.filter(
         Game.status.in_([GameStatus.LOBBY, 

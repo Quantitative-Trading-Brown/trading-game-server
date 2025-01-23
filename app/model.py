@@ -5,7 +5,7 @@ from flask_socketio import SocketIO
 from flask_redis import FlaskRedis
 
 db = SQLAlchemy()
-socketio = SocketIO(cors_allowed_origins=["http://localhost:3000", "http://192.168.1.23:3000"])
+socketio = SocketIO(cors_allowed_origins=["http://localhost:3000", "http://10.37.28.67:3000"])
 redis_client = FlaskRedis(decode_responses=True)
 
 class GameStatus(enum.Enum):
