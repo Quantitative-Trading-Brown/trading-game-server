@@ -5,11 +5,11 @@ import binascii
 
 from flask import Blueprint, request, jsonify
 from .model import GameStatus, Game, Player
-from .model import db, redis_client
+from .model import redis_client
 
 login = Blueprint('login', __name__)
 
-def generate_code(length=6):
+def generate_code(length=1):
     """Generate a random alphanumeric game code."""
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
@@ -19,58 +19,56 @@ def generate_token(prefix, length=32):
 
 @login.route('/create-game', methods=['POST'])
 def create_game():
-    cur_games = Game.query.filter(
-        Game.status.in_([GameStatus.LOBBY, 
-                         GameStatus.ACTIVE])).all()
+    game_codes = redis_client.hgetall("codes")
 
     code = generate_code()
-    # Check if game code in SQL database
-    while code in [g.code for g in cur_games]:
+    # Check if game code exists
+    while code in game_codes:
         code = generate_code()
 
-    # Return the code and token
-    new_game = Game(code=code, status=GameStatus.LOBBY)
-    db.session.add(new_game)
-    db.session.commit()
+    game_id = redis_client.incr("game_count")
+    admin_token = generate_token(prefix=f"admin-{game_id}-")
 
-    new_game.token = generate_token(prefix=f"admin-{new_game.gid}-")
-    db.session.commit()
+    redis_client.hset("codes", code, game_id)
+    redis_client.hset(f"game:{game_id}", "code", code)
+    redis_client.hset(f"admin_tokens", game_id, admin_token)
+    redis_client.set(f"game:{game_id}:state", 0)
 
-    redis_client.set(f"{new_game.gid}:state", 0)
-
-    return jsonify({"code": code, "token": new_game.token}), 201
+    return jsonify({"code": code, "token": admin_token}), 201
 
 @login.route('/join-game', methods=['POST'])
 def join_game():
-    cur_games = Game.query.filter(
-        Game.status.in_([GameStatus.LOBBY, 
-                         GameStatus.ACTIVE])).all()
+    game_codes = redis_client.hgetall("codes")
 
     data = request.json
     code = data.get('code')
     username = data.get('playerName')
 
     # Check if game exists in database
-    gids = [g.gid for g in cur_games if g.code == code]
-    if not gids:
+    game_id = game_codes.get(code)
+
+    if game_id is None:
         return jsonify({"error": "Game not found"}), 404
-    gid = gids[0]
 
     # Check if username is empty
     if not username:
         return jsonify({"error": "Username cannot be empty"}), 400
 
     # Check if player name exists
-    player = Player.query.filter_by(username=username, game_id=gid).first()
-    if player:
+    usernames = [redis_client.hget(f"user:{player_id}", "username") for player_id 
+               in redis_client.zrange(f"game:{game_id}:users", 0, 0)]
+
+    if username in usernames:
         return jsonify({"error": "Player name already exists"}), 400
 
-    new_user = Player(username=username, game_id=gid)
-    db.session.add(new_user)
-    db.session.commit()
 
-    new_user.token = generate_token(prefix=f"player-{new_user.pid}-")
-    db.session.commit()
+    player_id = redis_client.incr("player_count")
+    player_token = generate_token(prefix=f"player-{player_id}-")
+
+    redis_client.hset(f"user:{player_id}", "username", username)
+    redis_client.hset(f"user:{player_id}", "game_id", game_id)
+    redis_client.hset(f"player_tokens", player_id, player_token)
+    redis_client.zadd(f"game:{game_id}:users", {str(player_id): 0})
     
     return jsonify({"message": "Joined successfully", 
-                    "token": new_user.token}), 200
+                    "token": player_token}), 200

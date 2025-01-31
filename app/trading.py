@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from .model import GameStatus, Game, Player
-from .model import socketio, db, redis_client
+from .model import socketio, redis_client
 from .exchange import process_order, cancel_order, cancel_all_orders
 
 trading = Blueprint('trading', __name__)
@@ -11,9 +11,10 @@ def new_order(order_type, price, amount):
         return
 
     player_id = int(redis_client.hget("socket_users", request.sid))
-    game_id = int(redis_client.hget("socket_games", request.sid))
+    game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
 
-    orderbook, inventory, mrp = process_order(game_id, player_id, order_type, price, amount)
+    with redis_client.lock("everything"):
+        orderbook, inventory, mrp = process_order(game_id, player_id, order_type, price, amount)
 
     socketio.emit("orderbook", orderbook,
                   namespace="/player", to=game_id)
@@ -37,9 +38,11 @@ def new_order(order_type, price, amount):
 @socketio.on("cancel", namespace="/player")
 def cancel(price):
     player_id = int(redis_client.hget("socket_users", request.sid))
-    game_id = int(redis_client.hget("socket_games", request.sid))
+    game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
 
-    updates = cancel_order(game_id, player_id, price)
+    with redis_client.lock("everything"):
+        updates = cancel_order(game_id, player_id, price)
+    
     socketio.emit("orderbook", updates,
                   namespace="/player", to=game_id)
     socketio.emit("orderbook", updates,
@@ -51,9 +54,11 @@ def cancel(price):
 @socketio.on("cancel_all", namespace="/player")
 def cancel_all():
     player_id = int(redis_client.hget("socket_users", request.sid))
-    game_id = int(redis_client.hget("socket_games", request.sid))
+    game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
 
-    updates = cancel_all_orders(game_id, player_id)
+    with redis_client.lock("everything"):
+        updates = cancel_all_orders(game_id, player_id)
+
     socketio.emit("orderbook", updates,
                   namespace="/player", to=game_id)
     socketio.emit("orderbook", updates,
