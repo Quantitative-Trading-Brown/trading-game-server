@@ -54,7 +54,7 @@ def process_order(game_id, player_id, order_type, price, amount):
 
         # Create updates for the client
         update_amount = trade_amount if order_type == 'BUY' else -trade_amount
-        new_amount = redis_client.hincrby(f"game:{game_id}:orderbook", trade_price, update_amount)
+        new_amount = int(redis_client.hincrby(f"game:{game_id}:orderbook", trade_price, update_amount))
         orderbook_updates[trade_price] = new_amount
 
         # Update amount in orderbook if old order residual exists, else knock it out completely
@@ -67,20 +67,20 @@ def process_order(game_id, player_id, order_type, price, amount):
         
         # Update users' positions
 
-        new_amount = redis_client.hincrby(f"user:{buyer_id}:asset", "cash", 
-                                          -trade_price * trade_amount)
+        new_amount = int(redis_client.hincrby(f"user:{buyer_id}:asset", "cash", 
+                                          -trade_price * trade_amount))
         inventory_updates[buyer_id]["cash"] = new_amount
 
-        new_amount = redis_client.hincrby(f"user:{buyer_id}:asset", "security", 
-                                          trade_amount)
+        new_amount = int(redis_client.hincrby(f"user:{buyer_id}:asset", "security", 
+                                          trade_amount))
         inventory_updates[buyer_id]["security"] = new_amount
 
-        new_amount = redis_client.hincrby(f"user:{seller_id}:asset", "cash", 
-                                          trade_price * trade_amount)
+        new_amount = int(redis_client.hincrby(f"user:{seller_id}:asset", "cash", 
+                                          trade_price * trade_amount))
         inventory_updates[seller_id]["cash"] = new_amount
 
-        new_amount = redis_client.hincrby(f"user:{seller_id}:asset", "security", 
-                                          -trade_amount)
+        new_amount = int(redis_client.hincrby(f"user:{seller_id}:asset", "security", 
+                                          -trade_amount))
         inventory_updates[seller_id]["security"] = new_amount
 
         remaining_amount -= trade_amount
@@ -88,7 +88,7 @@ def process_order(game_id, player_id, order_type, price, amount):
 
     # Put in new order if there is residual in the new order
     if remaining_amount > 0:
-        order_count = redis_client.incr(f'{orderbook_key}:order_count')
+        order_count = int(redis_client.incr(f'{orderbook_key}:order_count'))
         order_id = "9"*3 * (order_count // (10**3)) + str(order_count % (10**3)).rjust(3, "0")
 
         order_key = f"{orderbook_key}:{order_id}"
@@ -125,7 +125,7 @@ def cancel_order(game_id, player_id, price):
         side_key = f"game:{game_id}:orderbook:{order_side}"
 
         update_amount = -order_amount if order_side == 'bids' else order_amount
-        new_amount = redis_client.hincrby(f"game:{game_id}:orderbook", price, update_amount)
+        new_amount = int(redis_client.hincrby(f"game:{game_id}:orderbook", price, update_amount))
         orderbook_updates[price] = new_amount
 
         redis_client.zrem(side_key, order_id)
@@ -148,7 +148,7 @@ def cancel_all_orders(game_id, player_id):
         side_key = f"game:{game_id}:orderbook:{order_side}"
 
         update_amount = -order_amount if order_side == 'bids' else order_amount
-        new_amount = redis_client.hincrby(f"game:{game_id}:orderbook", order_price, update_amount)
+        new_amount = int(redis_client.hincrby(f"game:{game_id}:orderbook", order_price, update_amount))
         orderbook_updates[order_price] = new_amount
 
         redis_client.zrem(side_key, order_id)

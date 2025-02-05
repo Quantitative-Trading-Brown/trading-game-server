@@ -11,7 +11,7 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)  # Load configuration from Config class
 
-    CORS(app, origins=["http://10.37.28.67:3000", "http://localhost:3000"])
+    CORS(app, origins=["http://10.37.28.67:3000", "http://localhost:3000", "https://simulator.qtab.site"])
 
     socketio.init_app(app)
     db.init_app(app)

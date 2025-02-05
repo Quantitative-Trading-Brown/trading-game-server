@@ -56,7 +56,7 @@ def join_game():
 
     # Check if player name exists
     usernames = [redis_client.hget(f"user:{player_id}", "username") for player_id 
-               in redis_client.zrange(f"game:{game_id}:users", 0, 0)]
+               in redis_client.zrange(f"game:{game_id}:users", 0, -1)]
 
     if username in usernames:
         return jsonify({"error": "Player name already exists"}), 400
