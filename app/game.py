@@ -5,17 +5,30 @@ from .rankings import generate_rankings
 
 game = Blueprint('game', __name__)
 
+# {{{ Snapshotting
+def game_snapshot(game_id, player_id=None):
+    securities = redis_client.smembers(f"game:{game_id}:securities")
+    orderbooks = {sec_id:redis_client.hgetall(f"game:{game_id}:security:{sec_id}:orderbook") 
+                  for sec_id in securities}
+    security_props = {sec_id:redis_client.hgetall(f"game:{game_id}:security:{sec_id}") 
+                  for sec_id in securities}
+    snapshot = {
+        "game_state": redis_client.get(f"game:{game_id}:state"),
+        "game_props": redis_client.hgetall(f"game:{game_id}"),
+        "securities": security_props,
+        "orderbooks": orderbooks,
+    }
+
+    if player_id:
+        snapshot["username"] = redis_client.hget(f"user:{player_id}", "username")
+
+    return snapshot
+
 @socketio.on("snapshot", namespace="/admin")
 def admin_snapshot():
     game_id = int(redis_client.hget("socket_admins", request.sid))
 
-    snapshot = {
-        "game_state": redis_client.get(f"game:{game_id}:state"),
-        "game_props": redis_client.hgetall(f"game:{game_id}"),
-        "orderbook": redis_client.hgetall(f"game:{game_id}:orderbook"),
-    }
-
-    socketio.emit("snapshot", snapshot, 
+    socketio.emit("snapshot", game_snapshot(game_id), 
                   namespace="/admin", to=request.sid)
 
 @socketio.on("snapshot", namespace="/player")
@@ -23,15 +36,9 @@ def player_snapshot():
     player_id = int(redis_client.hget("socket_users", request.sid))
     game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
 
-    snapshot = {
-        "username": redis_client.hget(f"user:{player_id}", "username"),
-        "game_state": redis_client.get(f"game:{game_id}:state"),
-        "game_props": redis_client.hgetall(f"game:{game_id}"),
-        "orderbook": redis_client.hgetall(f"game:{game_id}:orderbook"),
-    }
-
-    socketio.emit("snapshot", snapshot, 
+    socketio.emit("snapshot", game_snapshot(game_id, player_id), 
                   namespace="/player", to=request.sid)
+# }}}
 
 @socketio.on("news", namespace="/admin")
 def admin_broadcast(message):
@@ -54,14 +61,20 @@ def set_state(game_id, state):
 @socketio.on("startgame", namespace="/admin")
 def startgame(settings={}):
     game_id = int(redis_client.hget("socket_admins", request.sid))
-    for key in settings:
-        redis_client.hset(f"game:{game_id}", key, settings[key])
-    all_props = redis_client.hgetall(f"game:{game_id}")
+    for security in settings["securities"]:
+        sec_id = security["id"]
+        redis_client.sadd(f"game:{game_id}:securities", sec_id)
+        redis_client.hset(f"game:{game_id}:security:{sec_id}", "name", security["name"])
+        redis_client.hset(f"game:{game_id}:security:{sec_id}", "bookMin", security["bookMin"])
+        redis_client.hset(f"game:{game_id}:security:{sec_id}", "bookMax", security["bookMax"])
 
-    socketio.emit("gameprops_update", all_props,
-                  namespace="/player", to=game_id)
-    socketio.emit("gameprops_update", all_props, 
+    # For now, securities are the only things we need to update. Maybe other game settings later?
+    security_props = {sec_id:redis_client.hgetall(f"game:{game_id}:security:{sec_id}") 
+                      for sec_id in redis_client.smembers(f"game:{game_id}:securities")}
+    socketio.emit("securities_update", security_props, 
                   namespace="/admin", to=game_id)
+    socketio.emit("securities_update", security_props, 
+                  namespace="/player", to=game_id)
 
     set_state(game_id, 1)
 
@@ -74,14 +87,15 @@ def endgame():
 def rankgame(true_prices={}):
     game_id = int(redis_client.hget("socket_admins", request.sid))
 
-    for key in true_prices:
-        redis_client.hset(f"game:{game_id}:true_prices", key, true_prices[key])
-    redis_client.hset(f"game:{game_id}:true_prices", "cash", 1)
+    for sec_id, price in true_prices.items():
+        redis_client.hset(f"game:{game_id}:true_prices", sec_id, price)
+    redis_client.hset(f"game:{game_id}:true_prices", 0, 1)
 
-    generate_rankings(game_id, redis_client.hgetall(f"game:{game_id}:true_prices"))
+    generate_rankings(game_id)
     set_state(game_id, 3)
 # }}}
 
+# {{{ Leaderboard Management
 @socketio.on("leaderboard", namespace="/admin")
 def admin_leaderboard():
     game_id = int(redis_client.hget("socket_admins", request.sid))
@@ -99,4 +113,4 @@ def player_leaderboard():
                       for pid, score in 
                       redis_client.zrevrange(f"game:{game_id}:users", 0, -1, withscores=True)]
     print(named_rankings)
-    socketio.emit("leaderboard", named_rankings, namespace="/player", to=request.sid)
+    socketio.emit("leaderboard", named_rankings, namespace="/player", to=request.sid)# }}}

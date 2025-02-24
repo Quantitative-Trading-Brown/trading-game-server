@@ -6,7 +6,7 @@ from .exchange import process_order, cancel_order, cancel_all_orders
 trading = Blueprint('trading', __name__)
 
 @socketio.on("order", namespace="/player")
-def new_order(order_type, price, amount):
+def new_order(security, order_type, price, amount):
     if not isinstance(amount, int) or amount > 1000:
         return
 
@@ -14,14 +14,14 @@ def new_order(order_type, price, amount):
     game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
 
     with redis_client.lock("everything"):
-        orderbook, inventory, mrp = process_order(game_id, player_id, order_type, price, amount)
+        orderbook_updates, inventory_updates, mrp = process_order(game_id, player_id, security, order_type, price, amount)
 
-    socketio.emit("orderbook", orderbook,
+    socketio.emit("orderbook", (security, orderbook_updates),
                   namespace="/player", to=game_id)
-    socketio.emit("orderbook", orderbook,
+    socketio.emit("orderbook", (security, orderbook_updates),
                   namespace="/admin", to=game_id)
 
-    for trader_id, inv in inventory.items():
+    for trader_id, inv in inventory_updates.items():
         trader_sid = redis_client.hget(f"user:{trader_id}", "sid")
         socketio.emit("inventory", inv,
                       namespace="/player", to=trader_sid)
@@ -32,37 +32,37 @@ def new_order(order_type, price, amount):
         socketio.emit("price", mrp,
                       namespace="/admin", to=game_id)
 
-    socketio.emit("message", f"{player_id}: {order_type} {amount} at {price}", 
+    socketio.emit("news", f"{player_id}: {order_type} {amount} at {price}", 
                   namespace="/admin", to=game_id)
 
 @socketio.on("cancel", namespace="/player")
-def cancel(price):
+def cancel(security, price):
     player_id = int(redis_client.hget("socket_users", request.sid))
     game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
 
     with redis_client.lock("everything"):
-        updates = cancel_order(game_id, player_id, price)
+        updates = cancel_order(game_id, player_id, security, price)
     
-    socketio.emit("orderbook", updates,
+    socketio.emit("orderbook", (security, updates),
                   namespace="/player", to=game_id)
-    socketio.emit("orderbook", updates,
+    socketio.emit("orderbook", (security, updates),
                   namespace="/admin", to=game_id)
 
-    socketio.emit("message", f"{player_id}: canceled at {price}", 
+    socketio.emit("news", f"{player_id}: canceled at {price}", 
                   namespace="/admin", to=game_id)
 
 @socketio.on("cancel_all", namespace="/player")
-def cancel_all():
+def cancel_all(security):
     player_id = int(redis_client.hget("socket_users", request.sid))
     game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
 
     with redis_client.lock("everything"):
-        updates = cancel_all_orders(game_id, player_id)
+        updates = cancel_all_orders(game_id, player_id, security)
 
-    socketio.emit("orderbook", updates,
+    socketio.emit("orderbook", (security, updates),
                   namespace="/player", to=game_id)
-    socketio.emit("orderbook", updates,
+    socketio.emit("orderbook", (security, updates),
                   namespace="/admin", to=game_id)
 
-    socketio.emit("message", f"{player_id}: canceled everything", 
+    socketio.emit("news", f"{player_id}: canceled everything", 
                   namespace="/admin", to=game_id)

@@ -1,12 +1,13 @@
 from .model import redis_client
 
-def generate_rankings(game_id, true_values):
-    """
-    true_values: dictionary containing true values of assets
-    """
+def generate_rankings(game_id):
+    true_prices = redis_client.hgetall(f"game:{game_id}:true_prices")
     players = redis_client.zrangebyscore(f"game:{game_id}:users", 0 , 0)
+
     for player_id in players:
-        player_info = redis_client.hgetall(f"user:{player_id}:asset")
-        score = sum(int(true_values[asset]) * int(player_info[asset]) for asset in player_info)
+        player_inv = redis_client.hgetall(f"user:{player_id}:inventory")
+        score = 0
+        for sec_id in player_inv:
+            score += int(true_prices[sec_id]) * int(player_inv[sec_id])
         redis_client.zadd(f"game:{game_id}:users", {str(player_id): score})
     return redis_client.zrevrange(f"game:{game_id}:users", 0, -1, withscores=True)
