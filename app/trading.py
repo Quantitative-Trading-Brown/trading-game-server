@@ -27,9 +27,9 @@ def new_order(security, order_type, price, amount):
                       namespace="/player", to=trader_sid)
 
     if mrp is not None:
-        socketio.emit("price", mrp,
+        socketio.emit("price", (security, mrp),
                       namespace="/player", to=game_id)
-        socketio.emit("price", mrp,
+        socketio.emit("price", (security, mrp),
                       namespace="/admin", to=game_id)
 
     socketio.emit("news", f"{player_id}: {order_type} {amount} at {price}", 
