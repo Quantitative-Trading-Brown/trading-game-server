@@ -9,7 +9,7 @@ from .model import redis_client
 
 login = Blueprint('login', __name__)
 
-def generate_code(length=1):
+def generate_code(length=6):
     """Generate a random alphanumeric game code."""
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
