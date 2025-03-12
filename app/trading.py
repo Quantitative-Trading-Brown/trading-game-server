@@ -32,8 +32,8 @@ def new_order(security, order_type, price, amount):
         socketio.emit("price", (security, mrp),
                       namespace="/admin", to=game_id)
 
-    socketio.emit("news", f"{player_id}: {order_type} {amount} at {price}", 
-                  namespace="/admin", to=game_id)
+    # socketio.emit("news", f"{player_id}: {order_type} {amount} at {price}", 
+    #               namespace="/admin", to=game_id)
 
 @socketio.on("cancel", namespace="/player")
 def cancel(security, price):
@@ -48,8 +48,8 @@ def cancel(security, price):
     socketio.emit("orderbook", (security, updates),
                   namespace="/admin", to=game_id)
 
-    socketio.emit("news", f"{player_id}: canceled at {price}", 
-                  namespace="/admin", to=game_id)
+    # socketio.emit("news", f"{player_id}: canceled at {price}", 
+    #               namespace="/admin", to=game_id)
 
 @socketio.on("cancel_all", namespace="/player")
 def cancel_all(security):
@@ -64,5 +64,5 @@ def cancel_all(security):
     socketio.emit("orderbook", (security, updates),
                   namespace="/admin", to=game_id)
 
-    socketio.emit("news", f"{player_id}: canceled everything", 
-                  namespace="/admin", to=game_id)
+    # socketio.emit("news", f"{player_id}: canceled everything", 
+    #               namespace="/admin", to=game_id)
