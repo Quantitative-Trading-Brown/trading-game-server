@@ -9,5 +9,5 @@ def generate_rankings(game_id):
         score = 0
         for sec_id in player_inv:
             score += float(true_prices[sec_id]) * float(player_inv[sec_id])
-        redis_client.zadd(f"game:{game_id}:users", {str(player_id): score})
+        redis_client.zadd(f"game:{game_id}:users", {str(player_id): round(score,2)})
     return redis_client.zrevrange(f"game:{game_id}:users", 0, -1, withscores=True)
