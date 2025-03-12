@@ -67,6 +67,7 @@ def startgame(settings={}):
         redis_client.hset(f"game:{game_id}:security:{sec_id}", "name", security["name"])
         redis_client.hset(f"game:{game_id}:security:{sec_id}", "bookMin", security["bookMin"])
         redis_client.hset(f"game:{game_id}:security:{sec_id}", "bookMax", security["bookMax"])
+        redis_client.hset(f"game:{game_id}:security:{sec_id}", "scale", security["scale"])
 
     # For now, securities are the only things we need to update. Maybe other game settings later?
     security_props = {sec_id:redis_client.hgetall(f"game:{game_id}:security:{sec_id}") 

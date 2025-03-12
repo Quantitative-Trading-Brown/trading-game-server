@@ -8,6 +8,6 @@ def generate_rankings(game_id):
         player_inv = redis_client.hgetall(f"user:{player_id}:inventory")
         score = 0
         for sec_id in player_inv:
-            score += int(true_prices[sec_id]) * int(player_inv[sec_id])
+            score += float(true_prices[sec_id]) * float(player_inv[sec_id])
         redis_client.zadd(f"game:{game_id}:users", {str(player_id): score})
     return redis_client.zrevrange(f"game:{game_id}:users", 0, -1, withscores=True)
