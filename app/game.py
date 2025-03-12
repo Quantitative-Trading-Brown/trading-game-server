@@ -44,9 +44,9 @@ def player_snapshot():
 def admin_broadcast(message):
     """Broadcast a message to all connected clients."""
     game_id = int(redis_client.hget("socket_admins", request.sid))
-    socketio.emit("news", "[admin] " + message, 
+    socketio.emit("news", "[news] " + message, 
                   namespace="/admin", to=game_id)
-    socketio.emit("news", "[admin] " + message, 
+    socketio.emit("news", "[news] " + message, 
                   namespace="/player", to=game_id)
 
 # {{{ State Controller
