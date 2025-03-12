@@ -28,6 +28,8 @@ def process_order(game_id, player_id, sec_id, order_type, price, amount):
     order_set_key = f"{orderbook_key}:{'bids' if order_type == 'BUY' else 'asks'}"
     opposite_set_key = f"{orderbook_key}:{'asks' if order_type == 'BUY' else 'bids'}"
 
+    security_scale = float(redis_client.hget(f"game:{game_id}:security:{sec_id}", "scale"))
+
     mrp = None
 
     while remaining_amount > 0:
@@ -68,18 +70,22 @@ def process_order(game_id, player_id, sec_id, order_type, price, amount):
         
         # Update users' positions
 
-        new_amount = int(redis_client.hincrby(f"user:{buyer_id}:inventory", 0, 
-                                          -trade_price * trade_amount))
+        # Buyer -Cash
+        new_amount = float(redis_client.hincrbyfloat(f"user:{buyer_id}:inventory", 0, 
+                                          -trade_price * trade_amount * security_scale))
         inventory_updates[buyer_id][0] = new_amount
 
+        # Buyer +Security
         new_amount = int(redis_client.hincrby(f"user:{buyer_id}:inventory", sec_id, 
                                           trade_amount))
         inventory_updates[buyer_id][sec_id] = new_amount
 
-        new_amount = int(redis_client.hincrby(f"user:{seller_id}:inventory", 0, 
-                                          trade_price * trade_amount))
+        # Seller +Cash
+        new_amount = float(redis_client.hincrbyfloat(f"user:{seller_id}:inventory", 0, 
+                                          trade_price * trade_amount * security_scale))
         inventory_updates[seller_id][0] = new_amount
 
+        # Seller -Security
         new_amount = int(redis_client.hincrby(f"user:{seller_id}:inventory", sec_id, 
                                           -trade_amount))
         inventory_updates[seller_id][sec_id] = new_amount
