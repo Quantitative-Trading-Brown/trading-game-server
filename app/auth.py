@@ -17,10 +17,8 @@ def verify_token(token, auth_type):
             auth_id = int(token_components[1])
             auth_token = r.hget("player_tokens", auth_id)
         elif auth_type == "admin":
-            print(token_components)
             auth_id = int(token_components[1])
             auth_token = r.hget(f"admin_tokens", auth_id)
-            print(auth_token)
         else:
             return None
 
