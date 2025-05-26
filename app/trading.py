@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from .model import GameStatus, Game, Player
-from .model import socketio, redis_client
+from .model import socketio, r
 from .exchange import process_order, cancel_order, cancel_all_orders
 
 trading = Blueprint('trading', __name__)
@@ -10,10 +10,10 @@ def new_order(security, order_type, price, amount):
     if not isinstance(amount, int) or amount > 1000:
         return
 
-    player_id = int(redis_client.hget("socket_users", request.sid))
-    game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
+    player_id = int(r.hget("socket_users", request.sid))
+    game_id = int(r.hget(f"user:{player_id}", "game_id"))
 
-    with redis_client.lock("everything"):
+    with r.lock("everything"):
         orderbook_updates, inventory_updates, mrp = process_order(game_id, player_id, security, order_type, price, amount)
 
     socketio.emit("orderbook", (security, orderbook_updates),
@@ -22,7 +22,7 @@ def new_order(security, order_type, price, amount):
                   namespace="/admin", to=game_id)
 
     for trader_id, inv in inventory_updates.items():
-        trader_sid = redis_client.hget(f"user:{trader_id}", "sid")
+        trader_sid = r.hget(f"user:{trader_id}", "sid")
         socketio.emit("inventory", inv,
                       namespace="/player", to=trader_sid)
 
@@ -37,10 +37,10 @@ def new_order(security, order_type, price, amount):
 
 @socketio.on("cancel", namespace="/player")
 def cancel(security, price):
-    player_id = int(redis_client.hget("socket_users", request.sid))
-    game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
+    player_id = int(r.hget("socket_users", request.sid))
+    game_id = int(r.hget(f"user:{player_id}", "game_id"))
 
-    with redis_client.lock("everything"):
+    with r.lock("everything"):
         updates = cancel_order(game_id, player_id, security, price)
     
     socketio.emit("orderbook", (security, updates),
@@ -53,10 +53,10 @@ def cancel(security, price):
 
 @socketio.on("cancel_all", namespace="/player")
 def cancel_all(security):
-    player_id = int(redis_client.hget("socket_users", request.sid))
-    game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
+    player_id = int(r.hget("socket_users", request.sid))
+    game_id = int(r.hget(f"user:{player_id}", "game_id"))
 
-    with redis_client.lock("everything"):
+    with r.lock("everything"):
         updates = cancel_all_orders(game_id, player_id, security)
 
     socketio.emit("orderbook", (security, updates),

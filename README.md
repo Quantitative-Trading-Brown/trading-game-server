@@ -1,6 +1,6 @@
 # trading-game-server
 
-## macos
+## macos (outdated since update to valkey)
 - Installing redis: brew services redis
 - Running redis: brew services start
 

@@ -3,7 +3,7 @@ import logging
 from flask import Flask
 from flask_cors import CORS
 from .config import Config
-from .model import db, socketio, redis_client
+from .model import db, socketio, r
 
 def create_app(config_class=Config):
     logging.getLogger('werkzeug').disabled = True
@@ -15,13 +15,12 @@ def create_app(config_class=Config):
 
     socketio.init_app(app)
     db.init_app(app)
-    redis_client.init_app(app)
 
     with app.app_context():
         db.drop_all()
         db.create_all()
 
-        redis_client.flushall()
+        r.flushall()
 
     from .login import login as login_blueprint
     app.register_blueprint(login_blueprint)

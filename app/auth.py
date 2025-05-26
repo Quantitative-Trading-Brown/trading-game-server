@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_socketio import disconnect, join_room
-from .model import socketio, redis_client
+from .model import socketio, r
 from .model import GameStatus, Game, Player
 
 auth = Blueprint('auth', __name__)
@@ -15,10 +15,12 @@ def verify_token(token, auth_type):
             return None
         elif auth_type == "player":
             auth_id = int(token_components[1])
-            auth_token = redis_client.hget("player_tokens", auth_id)
+            auth_token = r.hget("player_tokens", auth_id)
         elif auth_type == "admin":
+            print(token_components)
             auth_id = int(token_components[1])
-            auth_token = redis_client.hget(f"admin_tokens", auth_id)
+            auth_token = r.hget(f"admin_tokens", auth_id)
+            print(auth_token)
         else:
             return None
 
@@ -56,11 +58,11 @@ def player_connect():
     player_id = verify_token(token, "player")
 
     if player_id is not None:
-        game_id = int(redis_client.hget(f"user:{player_id}", "game_id"))
+        game_id = int(r.hget(f"user:{player_id}", "game_id"))
 
         join_room(game_id)
-        redis_client.hset("socket_users", request.sid, player_id)
-        redis_client.hset(f"user:{player_id}", "sid", request.sid)
+        r.hset("socket_users", request.sid, player_id)
+        r.hset(f"user:{player_id}", "sid", request.sid)
         socketio.emit('message', 'You are authenticated and connected!', 
                       namespace="/player", to=request.sid)
     else:
@@ -74,7 +76,7 @@ def admin_connect():
     
     if game_id is not None:
         join_room(game_id)
-        redis_client.hset("socket_admins", request.sid, game_id)
+        r.hset("socket_admins", request.sid, game_id)
         socketio.emit("news", f'You are authenticated and connected!', 
                       namespace="/admin", to=request.sid)
     else:
@@ -82,6 +84,6 @@ def admin_connect():
 
 @socketio.on('disconnect', namespace='/player')
 def player_disconnect():
-    player_id = int(redis_client.hget("socket_users", request.sid))
-    redis_client.hdel(f"user:{player_id}", "sid")
-    redis_client.hdel("socket_users", request.sid)
+    player_id = int(r.hget("socket_users", request.sid))
+    r.hdel(f"user:{player_id}", "sid")
+    r.hdel("socket_users", request.sid)

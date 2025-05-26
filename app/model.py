@@ -2,11 +2,11 @@ import enum
 
 from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO
-from flask_redis import FlaskRedis
+import valkey
 
 db = SQLAlchemy()
 socketio = SocketIO(cors_allowed_origins=["https://simulator.qtab.site", "http://localhost:3000", "http://10.37.28.67:3000"])
-redis_client = FlaskRedis(decode_responses=True)
+r = valkey.Valkey(host="localhost", port=6379, db=0, decode_responses=True)
 
 class GameStatus(enum.Enum):
     LOBBY = 0
