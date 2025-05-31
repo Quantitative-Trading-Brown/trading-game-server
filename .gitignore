@@ -4,6 +4,9 @@ server-venv/
 .env/
 instance/
 
+# build
+*.spec
+
 # pixi environments
 pixi.lock
 .pixi
