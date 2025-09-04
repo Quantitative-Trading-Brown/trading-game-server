@@ -34,6 +34,7 @@ def game_snapshot(game_id, player_id=None):
 
     if player_id:
         snapshot["username"] = r.hget(f"user:{player_id}", "username")
+        snapshot["inventory"] = r.hgetall(f"user:{player_id}:inventory")
 
     return snapshot
 

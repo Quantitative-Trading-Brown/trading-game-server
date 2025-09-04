@@ -20,11 +20,13 @@ def new_order(security, order_type, price, amount):
         )
 
     if process_result is None:
-        socketio.emit("news", 
-                      """Your order exceeds the limit of 100 long/short inventory.
-                      Please reduce your order quantity or cancel some older orders.""",
-                      namespace="/player",
-                      to=request.sid)
+        socketio.emit(
+            "news",
+            ["", """Your order exceeds the limit of 100 long  or short inventory.
+            Please reduce your order quantity or cancel some older orders."""],
+            namespace="/player",
+            to=request.sid,
+        )
         return
     else:
         orderbook_updates, inventory_updates, mrp = process_result
