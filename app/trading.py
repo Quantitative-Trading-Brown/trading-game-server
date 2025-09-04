@@ -8,16 +8,26 @@ trading = Blueprint("trading", __name__)
 
 @socketio.on("order", namespace="/player")
 def new_order(security, order_type, price, amount):
-    if not isinstance(amount, int) or amount > 1000:
+    if not isinstance(amount, int) or amount > 10:
         return
 
     player_id = int(r.hget("socket_users", request.sid))
     game_id = int(r.hget(f"user:{player_id}", "game_id"))
 
     with r.lock("everything"):
-        orderbook_updates, inventory_updates, mrp = process_order(
+        process_result = process_order(
             game_id, player_id, security, order_type, price, amount
         )
+
+    if process_result is None:
+        socketio.emit("news", 
+                      """Your order exceeds the limit of 100 long/short inventory.
+                      Please reduce your order quantity or cancel some older orders.""",
+                      namespace="/player",
+                      to=request.sid)
+        return
+    else:
+        orderbook_updates, inventory_updates, mrp = process_result
 
     socketio.emit(
         "orderbook", (security, orderbook_updates), namespace="/player", to=game_id

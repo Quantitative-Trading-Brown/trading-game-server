@@ -10,7 +10,7 @@ def process_order(game_id, player_id, sec_id, order_type, price, amount):
     :param game_id          : The game_id
     :param player_id        : The id of the player making the new order
     :param sec_id           : The id of the security
-    :param order_type       : The type of the new order ('buy' or 'sell')
+    :param order_type       : The type of the new order ('BUY' or 'SELL')
     :param price            : New order price
     :param amount           : New order amount
     :return                 : A list of trades (buyer, seller, price, amount).
@@ -23,6 +23,20 @@ def process_order(game_id, player_id, sec_id, order_type, price, amount):
     remaining_amount = amount
     orderbook_key = f"game:{game_id}:security:{sec_id}:orderbook"
     user_orders_key = f"user:{player_id}:security:{sec_id}:orders"
+
+    # Check if the new order is valid (doesn't exceed position limit if it were added to inventory)
+    user_inventory = r.hget(f"user:{player_id}:inventory", f"{sec_id}")
+    user_inventory_num = int(user_inventory) if user_inventory else 0
+    user_orders = r.zrange(user_orders_key, 0, -1) or []
+    user_orders_num = sum([int(r.hget(order_id, "amount")) for order_id in user_orders])
+
+    if (
+        order_type == "BUY"
+        and (user_inventory_num + user_orders_num + amount > 100)
+        or order_type == "SELL"
+        and (user_inventory_num - user_orders_num - amount < -100)
+    ):
+        return None
 
     order_set_key = f"{orderbook_key}:{'bids' if order_type == 'BUY' else 'asks'}"
     opposite_set_key = f"{orderbook_key}:{'asks' if order_type == 'BUY' else 'bids'}"
@@ -105,9 +119,9 @@ def process_order(game_id, player_id, sec_id, order_type, price, amount):
     # Put in new order if there is residual in the new order
     if remaining_amount > 0:
         order_count = int(r.incr(f"{orderbook_key}:order_count"))
-        order_id = "9" * 3 * (order_count // (10**3)) + str(
-            order_count % (10**3)
-        ).rjust(3, "0")
+        order_id = "9" * 10 * (order_count // (10**10)) + str(
+            order_count % (10**10)
+        ).rjust(10, "0")
 
         order_key = f"{orderbook_key}:{order_id}"
         r.hset(

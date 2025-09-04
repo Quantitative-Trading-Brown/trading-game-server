@@ -1,9 +1,11 @@
+import json
 from flask import Blueprint, request, jsonify
 from flask_socketio import disconnect, join_room
 from .model import socketio, r
 from .model import GameStatus, Game, Player
 
-auth = Blueprint('auth', __name__)
+auth = Blueprint("auth", __name__)
+
 
 def verify_token(token, auth_type):
     """
@@ -27,32 +29,28 @@ def verify_token(token, auth_type):
         print("Authentication error:", e)
         return None
 
+
 # This acts as a soft auth check on the frontend to see if a redirect is necessary
-@auth.route("/auth", methods=['POST'])
+@auth.route("/auth", methods=["POST"])
 def checkAuth():
     data = request.json
     token = data["token"]
 
     verify_player = verify_token(token, "player")
     if verify_player is not None:
-        return jsonify({
-            "type": "player"
-        }), 201
-    
+        return jsonify({"type": "player"}), 201
+
     verify_admin = verify_token(token, "admin")
     if verify_admin is not None:
-        return jsonify({
-            "type": "admin"
-        }), 201
+        return jsonify({"type": "admin"}), 201
 
-    return jsonify({
-        "error": "Invalid token"
-    }), 404
+    return jsonify({"error": "Invalid token"}), 404
 
-@socketio.on('connect', namespace="/player")
+
+@socketio.on("connect", namespace="/player")
 def player_connect():
     # Extract token from the query parameters
-    token = request.args.get('token')
+    token = request.args.get("token")
     player_id = verify_token(token, "player")
 
     if player_id is not None:
@@ -61,26 +59,24 @@ def player_connect():
         join_room(game_id)
         r.hset("socket_users", request.sid, player_id)
         r.hset(f"user:{player_id}", "sid", request.sid)
-        socketio.emit('message', 'You are authenticated and connected!', 
-                      namespace="/player", to=request.sid)
     else:
         disconnect()
 
-@socketio.on('connect', namespace="/admin")
+
+@socketio.on("connect", namespace="/admin")
 def admin_connect():
     # Extract token from the query parameters
-    token = request.args.get('token')
+    token = request.args.get("token")
     game_id = verify_token(token, "admin")
-    
+
     if game_id is not None:
         join_room(game_id)
         r.hset("socket_admins", request.sid, game_id)
-        socketio.emit("news", f'You are authenticated and connected!', 
-                      namespace="/admin", to=request.sid)
     else:
         disconnect()
 
-@socketio.on('disconnect', namespace='/player')
+
+@socketio.on("disconnect", namespace="/player")
 def player_disconnect():
     player_id = int(r.hget("socket_users", request.sid))
     r.hdel(f"user:{player_id}", "sid")
