@@ -1,5 +1,6 @@
 import math
 
+
 class SinewaveBot:
     def __init__(self, target_prices, aggressiveness=1):
         """
@@ -13,7 +14,7 @@ class SinewaveBot:
         """
         Return the current bid/ask to post in the market.
         """
-        target_price = math.sin(time/5) * 20 + 50
+        target_price = math.sin(time / 5) * 20 + 50
 
         current_bid = target_price - 5
         current_ask = target_price + 5
