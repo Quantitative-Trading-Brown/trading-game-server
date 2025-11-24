@@ -1,15 +1,17 @@
 from datetime import datetime
+import time
 import json
 from flask import Blueprint, request, jsonify
 from .model import socketio, r
-from .model import GameStatus, Game, Player
 from .rankings import generate_rankings
+from .broadcaster import start_update_flusher
+from .bot import start_bot
 
 game = Blueprint("game", __name__)
 
 
 # {{{ Snapshotting
-def game_snapshot(game_id, player_id=None):
+def make_snapshot(game_id, player_id=None):
     securities = r.smembers(f"game:{game_id}:securities")
     orderbooks = {
         sec_id: r.hgetall(f"game:{game_id}:security:{sec_id}:orderbook")
@@ -35,6 +37,10 @@ def game_snapshot(game_id, player_id=None):
     if player_id:
         snapshot["username"] = r.hget(f"user:{player_id}", "username")
         snapshot["inventory"] = r.hgetall(f"user:{player_id}:inventory")
+        snapshot["orders"] = {
+            o: r.hgetall(f"game:{game_id}:order:{o}")
+            for o in r.smembers(f"user:{player_id}:orders")
+        }
 
     return snapshot
 
@@ -44,7 +50,7 @@ def admin_snapshot():
     game_id = int(r.hget("socket_admins", request.sid))
 
     socketio.emit(
-        "snapshot", game_snapshot(game_id), namespace="/admin", to=request.sid
+        "snapshot", make_snapshot(game_id), namespace="/admin", to=request.sid
     )
 
 
@@ -55,7 +61,7 @@ def player_snapshot():
 
     socketio.emit(
         "snapshot",
-        game_snapshot(game_id, player_id),
+        make_snapshot(game_id, player_id),
         namespace="/player",
         to=request.sid,
     )
@@ -83,8 +89,12 @@ def admin_broadcast(message):
     r.ltrim(key, 0, 99)
 
     # Broadcast to admins and players
-    socketio.emit("news", [entry["timestamp"], entry["message"]], namespace="/admin", to=game_id)
-    socketio.emit("news", [entry["timestamp"], entry["message"]], namespace="/player", to=game_id)
+    socketio.emit(
+        "news", [entry["timestamp"], entry["message"]], namespace="/admin", to=game_id
+    )
+    socketio.emit(
+        "news", [entry["timestamp"], entry["message"]], namespace="/player", to=game_id
+    )
 
 
 # {{{ State Controller
@@ -98,13 +108,14 @@ def set_state(game_id, state):
 @socketio.on("startgame", namespace="/admin")
 def startgame(settings={}):
     game_id = int(r.hget("socket_admins", request.sid))
+
+    r.set(f"game:{game_id}:timestart", int(time.time()))
+
     for security in settings["securities"]:
         sec_id = security["id"]
         r.sadd(f"game:{game_id}:securities", sec_id)
         r.hset(f"game:{game_id}:security:{sec_id}", "name", security["name"])
-        r.hset(f"game:{game_id}:security:{sec_id}", "bookMin", security["bookMin"])
-        r.hset(f"game:{game_id}:security:{sec_id}", "bookMax", security["bookMax"])
-        r.hset(f"game:{game_id}:security:{sec_id}", "scale", security["scale"])
+        r.hset(f"game:{game_id}:security:{sec_id}", "tick", security["tick"])
 
     # For now, securities are the only things we need to update. Maybe other game settings later?
     security_props = {
@@ -115,6 +126,9 @@ def startgame(settings={}):
     socketio.emit("securities_update", security_props, namespace="/player", to=game_id)
 
     set_state(game_id, 1)
+
+    start_update_flusher(game_id)
+    start_bot(game_id)
 
 
 @socketio.on("endgame", namespace="/admin")

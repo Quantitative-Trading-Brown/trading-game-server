@@ -2,7 +2,6 @@ import json
 from flask import Blueprint, request, jsonify
 from flask_socketio import disconnect, join_room
 from .model import socketio, r
-from .model import GameStatus, Game, Player
 
 auth = Blueprint("auth", __name__)
 

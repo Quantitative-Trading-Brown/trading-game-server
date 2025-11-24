@@ -1,205 +1,242 @@
 from collections import defaultdict
+import json
 
-from .model import Trade, r
+from .model import r
+from .lsfr import next_order_id_64
 
 
-def process_order(game_id, player_id, sec_id, order_type, price, amount):
+def process_order(game_id, player_id, sec_id, order_side, price, quantity):
     """
     Processes a new order using Redis sorted sets for prices and hashes for order details.
 
     :param game_id          : The game_id
     :param player_id        : The id of the player making the new order
     :param sec_id           : The id of the security
-    :param order_type       : The type of the new order ('BUY' or 'SELL')
+    :param order_side       : The side of the new order ('bid' or 'ask')
     :param price            : New order price
-    :param amount           : New order amount
-    :return                 : A list of trades (buyer, seller, price, amount).
+    :param quantity         : New order quantity
+    :return                 : A list of trades (buyer, seller, price, quantity).
     """
     # In the Redis storage, prices for bids in the sorted set are negative to facilitate sorting
     # Prices in order details are always positive
     orderbook_updates = defaultdict(int)
+    order_updates = defaultdict(dict)  # Maps user to dict of orders -> new quantities
     inventory_updates = defaultdict(dict)
 
-    remaining_amount = amount
+
+    remaining_quantity = quantity
     orderbook_key = f"game:{game_id}:security:{sec_id}:orderbook"
-    user_orders_key = f"user:{player_id}:security:{sec_id}:orders"
+    user_orders_key = f"user:{player_id}:orders"
 
-    # Check if the new order is valid (doesn't exceed position limit if it were added to inventory)
-    user_inventory = r.hget(f"user:{player_id}:inventory", f"{sec_id}")
-    user_inventory_num = int(user_inventory) if user_inventory else 0
-    user_orders = r.zrange(user_orders_key, 0, -1) or []
-    user_orders_num = sum([int(r.hget(order_id, "amount")) for order_id in user_orders])
+    order_opp = "ask" if order_side == "bid" else "bid"
+    orderbook_side = "bids" if order_side == "bid" else "asks"
+    orderbook_opp = "asks" if order_side == "bid" else "bids"
 
-    if (
-        order_type == "BUY"
-        and (user_inventory_num + user_orders_num + amount > 100)
-        or order_type == "SELL"
-        and (user_inventory_num - user_orders_num - amount < -100)
-    ):
-        return None
-
-    order_set_key = f"{orderbook_key}:{'bids' if order_type == 'BUY' else 'asks'}"
-    opposite_set_key = f"{orderbook_key}:{'asks' if order_type == 'BUY' else 'bids'}"
-
-    security_scale = float(r.hget(f"game:{game_id}:security:{sec_id}", "scale"))
+    order_set_key = f"{orderbook_key}:{orderbook_side}"
+    opposite_set_key = f"{orderbook_key}:{orderbook_opp}"
 
     mrp = None
 
-    while remaining_amount > 0:
+    while remaining_quantity > 0:
         best_price = r.zrange(opposite_set_key, 0, 0, withscores=True)
 
         if (
             not best_price
-            or (order_type == "SELL" and abs(best_price[0][1]) < price)
-            or (order_type == "BUY" and abs(best_price[0][1]) > price)
+            or (order_side == "ask" and abs(best_price[0][1]) < price)
+            or (order_side == "bid" and abs(best_price[0][1]) > price)
         ):
             break
 
         best_order_id = best_price[0][0]
-        best_order_details = r.hgetall(best_order_id)
+        best_order_key = f"game:{game_id}:order:{best_order_id}"
+        best_order_details = r.hgetall(best_order_key)
 
-        avail_amount = int(float(best_order_details["amount"]))
-        counterparty_id = int(best_order_details["player_id"])
-        counterparty_orders_key = f"user:{counterparty_id}:security:{sec_id}:orders"
+        avail_quantity = int(float(best_order_details["quantity"]))
+        counterparty_id = best_order_details["player_id"]
+        counterparty_orders_key = f"user:{counterparty_id}:orders"
 
         trade_price = int(best_order_details["price"])
-        trade_amount = min(remaining_amount, avail_amount)
+        trade_quantity = min(remaining_quantity, avail_quantity)
 
-        buyer_id = player_id if order_type == "BUY" else counterparty_id
-        seller_id = player_id if order_type == "SELL" else counterparty_id
+        buyer_id = player_id if order_side == "bid" else counterparty_id
+        seller_id = player_id if order_side == "ask" else counterparty_id
 
-        # Create updates for the client
-        update_amount = trade_amount if order_type == "BUY" else -trade_amount
-        new_amount = int(r.hincrby(orderbook_key, trade_price, update_amount))
-        orderbook_updates[trade_price] = new_amount
+        # Calculate what the new orderbook volume is at this price level
+        update_quantity = trade_quantity if order_side == "bid" else -trade_quantity
+        new_quantity = int(r.hincrby(orderbook_key, trade_price, update_quantity))
+        orderbook_updates[trade_price] = new_quantity
 
-        # Update amount in orderbook if old order residual exists, else knock it out completely
-        if avail_amount > trade_amount:
-            r.hset(best_order_id, "amount", avail_amount - trade_amount)
+        # Update quantity in orderbook if old order residual exists, else knock it out completely
+        if avail_quantity > trade_quantity:
+            r.hset(best_order_key, "quantity", avail_quantity - trade_quantity)
+            if not counterparty_id.startswith("BOT"):
+                order_updates[counterparty_id][best_order_id] = r.hgetall(
+                    best_order_key
+                )
         else:
-            r.zrem(counterparty_orders_key, best_order_id)
+            r.srem(counterparty_orders_key, best_order_id)
             r.zrem(opposite_set_key, best_order_id)
-            r.delete(best_order_id)
+            r.delete(best_order_key)
+            if not counterparty_id.startswith("BOT"):
+                order_updates[counterparty_id][best_order_id] = -1
 
         # Update users' positions
 
-        # Buyer -Cash
-        new_amount = float(
-            r.hincrbyfloat(
-                f"user:{buyer_id}:inventory",
-                0,
-                -trade_price * trade_amount * security_scale,
+        if not buyer_id.startswith("BOT"):
+            # Buyer -Cash
+            new_quantity = float(
+                r.hincrbyfloat(
+                    f"user:{buyer_id}:inventory",
+                    0,
+                    -trade_price * trade_quantity,
+                )
             )
-        )
-        inventory_updates[buyer_id][0] = new_amount
+            inventory_updates[buyer_id][0] = new_quantity
 
-        # Buyer +Security
-        new_amount = int(r.hincrby(f"user:{buyer_id}:inventory", sec_id, trade_amount))
-        inventory_updates[buyer_id][sec_id] = new_amount
-
-        # Seller +Cash
-        new_amount = float(
-            r.hincrbyfloat(
-                f"user:{seller_id}:inventory",
-                0,
-                trade_price * trade_amount * security_scale,
+            # Buyer +Security
+            new_quantity = int(
+                r.hincrby(f"user:{buyer_id}:inventory", sec_id, trade_quantity)
             )
-        )
-        inventory_updates[seller_id][0] = new_amount
+            inventory_updates[buyer_id][sec_id] = new_quantity
 
-        # Seller -Security
-        new_amount = int(
-            r.hincrby(f"user:{seller_id}:inventory", sec_id, -trade_amount)
-        )
-        inventory_updates[seller_id][sec_id] = new_amount
+        if not seller_id.startswith("BOT"):
+            # Seller +Cash
+            new_quantity = float(
+                r.hincrbyfloat(
+                    f"user:{seller_id}:inventory",
+                    0,
+                    trade_price * trade_quantity,
+                )
+            )
+            inventory_updates[seller_id][0] = new_quantity
 
-        remaining_amount -= trade_amount
+            # Seller -Security
+            new_quantity = int(
+                r.hincrby(f"user:{seller_id}:inventory", sec_id, -trade_quantity)
+            )
+            inventory_updates[seller_id][sec_id] = new_quantity
+
+        remaining_quantity -= trade_quantity
         mrp = trade_price
 
     # Put in new order if there is residual in the new order
-    if remaining_amount > 0:
+    if remaining_quantity > 0:
         order_count = int(r.incr(f"{orderbook_key}:order_count"))
         order_id = "9" * 10 * (order_count // (10**10)) + str(
             order_count % (10**10)
         ).rjust(10, "0")
 
-        order_key = f"{orderbook_key}:{order_id}"
+        order_key = f"game:{game_id}:order:{order_id}"
         r.hset(
             order_key,
             mapping={
-                "side": "bids" if order_type == "BUY" else "asks",
+                "security": sec_id,
+                "side": orderbook_side,
                 "price": price,
-                "amount": remaining_amount,
+                "quantity": remaining_quantity,
                 "player_id": player_id,
             },
         )
 
-        r.zadd(user_orders_key, {order_key: price})
+        orderbook_price = -price if order_side == "bid" else price
 
-        orderbook_price = -price if order_type == "BUY" else price
-        r.zadd(order_set_key, {order_key: orderbook_price})
+        r.sadd(user_orders_key, order_id)
+        r.zadd(order_set_key, {order_id: orderbook_price})
 
-        update_amount = remaining_amount if order_type == "BUY" else -remaining_amount
-        new_amount = r.hincrby(orderbook_key, price, update_amount)
-        orderbook_updates[price] = new_amount
-
-    return orderbook_updates, inventory_updates, mrp
-
-
-def cancel_order(game_id, player_id, sec_id, price):
-    orderbook_updates = defaultdict(int)
-
-    user_orders_key = f"user:{player_id}:security:{sec_id}:orders"
-    user_orders = r.zrangebyscore(user_orders_key, price, price)
-
-    for order_id in user_orders:
-        order_details = r.hgetall(order_id)
-        order_amount = int(float(order_details["amount"]))
-
-        order_side = order_details["side"]
-        side_key = f"game:{game_id}:security:{sec_id}:orderbook:{order_side}"
-
-        update_amount = -order_amount if order_side == "bids" else order_amount
-        new_amount = int(
-            r.hincrby(
-                f"game:{game_id}:security:{sec_id}:orderbook", price, update_amount
-            )
+        update_quantity = (
+            remaining_quantity if order_side == "bid" else -remaining_quantity
         )
-        orderbook_updates[price] = new_amount
+        new_quantity = r.hincrby(orderbook_key, price, update_quantity)
+        orderbook_updates[price] = new_quantity
 
-        r.zrem(side_key, order_id)
-        r.zrem(user_orders_key, order_id)
-        r.delete(order_id)
-    return orderbook_updates
+        if not player_id.startswith("BOT"):
+            order_updates[player_id][order_id] = r.hgetall(order_key)
+
+    r.rpush(
+        f"game:{game_id}:security:{sec_id}:orderbook:updates",
+        json.dumps(orderbook_updates),
+    )
+
+    return inventory_updates, order_updates, mrp
 
 
-def cancel_all_orders(game_id, player_id, sec_id):
+def cancel_order(game_id, player_id, order_id):
     orderbook_updates = defaultdict(int)
+    order_updates = defaultdict(dict)
 
-    user_orders_key = f"user:{player_id}:security:{sec_id}:orders"
-    user_orders = r.zrange(user_orders_key, 0, -1)
+    user_orders_key = f"user:{player_id}:orders"
+    order_key = f"game:{game_id}:order:{order_id}"
+
+    order_details = r.hgetall(order_key)
+
+    order_security = order_details["security"]
+    order_quantity = int(float(order_details["quantity"]))
+    order_side = order_details["side"]
+    order_price = order_details["price"]
+
+    side_key = f"game:{game_id}:security:{order_security}:orderbook:{order_side}"
+    update_quantity = -order_quantity if order_side == "bids" else order_quantity
+    new_quantity = int(
+        r.hincrby(
+            f"game:{game_id}:security:{order_security}:orderbook",
+            order_price,
+            update_quantity,
+        )
+    )
+    orderbook_updates[order_price] = new_quantity
+    order_updates[player_id][order_id] = -1
+
+    r.zrem(side_key, order_id)
+    r.srem(user_orders_key, order_id)
+    r.delete(order_key)
+
+    r.rpush(
+        f"game:{game_id}:security:{order_security}:orderbook:updates",
+        json.dumps(orderbook_updates),
+    )
+
+    return order_security, order_updates
+
+
+def cancel_all_orders(game_id, player_id):
+    orderbook_updates = defaultdict(dict)
+    order_updates = defaultdict(dict)
+
+    user_orders_key = f"user:{player_id}:orders"
+    user_orders = r.smembers(user_orders_key)
 
     for order_id in user_orders:
-        order_details = r.hgetall(order_id)
-        order_amount = int(float(order_details["amount"]))
+        order_key = f"game:{game_id}:order:{order_id}"
+
+        order_details = r.hgetall(order_key)
+        order_security = order_details["security"]
+        order_quantity = int(float(order_details["quantity"]))
         order_price = int(float(order_details["price"]))
-
         order_side = order_details["side"]
-        side_key = f"game:{game_id}:security:{sec_id}:orderbook:{order_side}"
 
-        update_amount = -order_amount if order_side == "bids" else order_amount
-        new_amount = int(
+        side_key = f"game:{game_id}:security:{order_security}:orderbook:{order_side}"
+
+        update_quantity = -order_quantity if order_side == "bids" else order_quantity
+        new_quantity = int(
             r.hincrby(
-                f"game:{game_id}:security:{sec_id}:orderbook",
+                f"game:{game_id}:security:{order_security}:orderbook",
                 order_price,
-                update_amount,
+                update_quantity,
             )
         )
-        orderbook_updates[order_price] = new_amount
+        orderbook_updates[order_security][order_price] = new_quantity
 
+        if not player_id.startswith("BOT"):
+            order_updates[player_id][order_id] = -1
+
+        r.srem(user_orders_key, order_id)
         r.zrem(side_key, order_id)
-        r.delete(order_id)
+        r.delete(order_key)
 
-    r.delete(user_orders_key)
+    for security, security_orderbook_updates in orderbook_updates.items():
+        r.rpush(
+            f"game:{game_id}:security:{order_security}:orderbook:updates",
+            json.dumps(security_orderbook_updates),
+        )
 
-    return orderbook_updates
+    return order_updates

@@ -4,7 +4,6 @@ import secrets
 import binascii
 
 from flask import Blueprint, request, jsonify
-from .model import GameStatus, Game, Player
 from .model import r
 
 login = Blueprint('login', __name__)
@@ -55,7 +54,7 @@ def join_game():
         return jsonify({"error": "Username cannot be empty"}), 400
 
     # Check if player name exists
-    usernames = [r.hget(f"user:{player_id}", "username") for player_id 
+    usernames = [r.hget(f"user:{player_id}", "username") for player_id
                in r.zrange(f"game:{game_id}:users", 0, -1)]
 
     if username in usernames:
@@ -69,6 +68,6 @@ def join_game():
     r.hset(f"user:{player_id}", "game_id", game_id)
     r.hset(f"player_tokens", player_id, player_token)
     r.zadd(f"game:{game_id}:users", {str(player_id): 0})
-    
-    return jsonify({"message": "Joined successfully", 
+
+    return jsonify({"message": "Joined successfully",
                     "token": player_token}), 200

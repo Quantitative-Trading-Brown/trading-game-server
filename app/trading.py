@@ -1,80 +1,71 @@
 from flask import Blueprint, request, jsonify
-from .model import GameStatus, Game, Player
 from .model import socketio, r
 from .exchange import process_order, cancel_order, cancel_all_orders
+import json
 
 trading = Blueprint("trading", __name__)
 
 
 @socketio.on("order", namespace="/player")
-def new_order(security, order_type, price, amount):
-    if not isinstance(amount, int) or amount > 10:
+def new_order(security, order_side, price, quantity):
+    exc_price = max(0, int(price))
+
+    if not isinstance(quantity, int):
         return
 
-    player_id = int(r.hget("socket_users", request.sid))
-    game_id = int(r.hget(f"user:{player_id}", "game_id"))
+    player_id = r.hget("socket_users", request.sid)
+    game_id = r.hget(f"user:{player_id}", "game_id")
 
     with r.lock("everything"):
-        process_result = process_order(
-            game_id, player_id, security, order_type, price, amount
+        inventory_updates, order_updates, mrp = process_order(
+            game_id, player_id, security, order_side, exc_price, quantity
         )
 
-    if process_result is None:
-        socketio.emit(
-            "news",
-            ["", """Your order exceeds the limit of 100 long  or short inventory.
-            Please reduce your order quantity or cancel some older orders."""],
-            namespace="/player",
-            to=request.sid,
-        )
-        return
-    else:
-        orderbook_updates, inventory_updates, mrp = process_result
-
-    socketio.emit(
-        "orderbook", (security, orderbook_updates), namespace="/player", to=game_id
-    )
-    socketio.emit(
-        "orderbook", (security, orderbook_updates), namespace="/admin", to=game_id
-    )
+    for trader_id, orders in order_updates.items():
+        trader_sid = r.hget(f"user:{trader_id}", "sid")
+        socketio.emit("orders", orders, namespace="/player", to=trader_sid)
 
     for trader_id, inv in inventory_updates.items():
         trader_sid = r.hget(f"user:{trader_id}", "sid")
         socketio.emit("inventory", inv, namespace="/player", to=trader_sid)
 
-    if mrp is not None:
-        socketio.emit("price", (security, mrp), namespace="/player", to=game_id)
-        socketio.emit("price", (security, mrp), namespace="/admin", to=game_id)
-
-    # socketio.emit("news", f"{player_id}: {order_type} {amount} at {price}",
+    # socketio.emit("news", f"{player_id}: {order_side} {quantity} at {price}",
     #               namespace="/admin", to=game_id)
 
 
 @socketio.on("cancel", namespace="/player")
-def cancel(security, price):
-    player_id = int(r.hget("socket_users", request.sid))
-    game_id = int(r.hget(f"user:{player_id}", "game_id"))
+def cancel(order_id):
+    player_id = r.hget("socket_users", request.sid)
+    game_id = r.hget(f"user:{player_id}", "game_id")
 
     with r.lock("everything"):
-        updates = cancel_order(game_id, player_id, security, price)
+        security, order_updates = cancel_order(
+            game_id, player_id, order_id
+        )
 
-    socketio.emit("orderbook", (security, updates), namespace="/player", to=game_id)
-    socketio.emit("orderbook", (security, updates), namespace="/admin", to=game_id)
+    for trader_id in order_updates:
+        trader_sid = r.hget("user:{trader_id}", "sid")
+        socketio.emit(
+            "orders", order_updates[trader_id], namespace="/player", to=trader_sid
+        )
 
     # socketio.emit("news", f"{player_id}: canceled at {price}",
     #               namespace="/admin", to=game_id)
 
 
 @socketio.on("cancel_all", namespace="/player")
-def cancel_all(security):
-    player_id = int(r.hget("socket_users", request.sid))
-    game_id = int(r.hget(f"user:{player_id}", "game_id"))
+def cancel_all():
+    player_id = r.hget("socket_users", request.sid)
+    game_id = r.hget(f"user:{player_id}", "game_id")
 
     with r.lock("everything"):
-        updates = cancel_all_orders(game_id, player_id, security)
+        order_updates = cancel_all_orders(game_id, player_id)
 
-    socketio.emit("orderbook", (security, updates), namespace="/player", to=game_id)
-    socketio.emit("orderbook", (security, updates), namespace="/admin", to=game_id)
+    for trader_id in order_updates:
+        trader_sid = r.hget("user:{trader_id}", "sid")
+        socketio.emit(
+            "orders", order_updates[trader_id], namespace="/player", to=trader_sid
+        )
 
     # socketio.emit("news", f"{player_id}: canceled everything",
     #               namespace="/admin", to=game_id)
