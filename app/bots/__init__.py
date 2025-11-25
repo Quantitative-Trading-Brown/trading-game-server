@@ -1,6 +1,6 @@
 from .sinewave import SinewaveBot
 
 # Mapping strategy names to classes
-strategies = {
+bots = {
     "sinewave": SinewaveBot,
 }

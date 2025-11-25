@@ -3,7 +3,7 @@ import logging
 from flask import Flask
 from flask_cors import CORS
 from .config import Config
-from .model import socketio, r
+from .constants import socketio, r
 
 def create_app(config_class=Config):
     logging.getLogger('werkzeug').disabled = True
@@ -23,8 +23,8 @@ def create_app(config_class=Config):
     from .game import game as game_blueprint
     app.register_blueprint(game_blueprint)
 
-    from .trading import trading as trading_blueprint
-    app.register_blueprint(trading_blueprint)
+    from .gateway import gateway as gateway_blueprint
+    app.register_blueprint(gateway_blueprint)
 
     from .auth import auth as auth_blueprint
     app.register_blueprint(auth_blueprint)

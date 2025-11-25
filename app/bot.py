@@ -1,16 +1,14 @@
-from .bots import strategies
-from .model import socketio, r
-from .exchange import process_order, cancel_order, cancel_all_orders
 import json
 import time
 
+from .bots import bots
+from .constants import socketio, r
+from .exchange import process_limit_order, cancel_order, cancel_all_orders
 
 def start_bot(game_id):
     def run_bot():
-        bot = strategies["sinewave"](0)
-        while True:
-            if r.get(f"game:{game_id}:state") != "1":
-                break
+        bot = bots["sinewave"](20, 5, 50)
+        while r.get(f"game:{game_id}:state") == "1":
             bot_cancel_all(game_id)
             for quote in bot.place_orders(
                 int(time.time()) - int(r.get(f"game:{game_id}:timestart")),
@@ -28,7 +26,7 @@ def bot_order(game_id, security, order_side, price, quantity):
     trader_id = f"BOT_{game_id}"
 
     with r.lock("everything"):
-        inventory_updates, order_updates, mrp = process_order(
+        inventory_updates, order_updates, mrp = process_limit_order(
             game_id, trader_id, security, order_side, exc_price, quantity
         )
 

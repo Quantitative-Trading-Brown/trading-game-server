@@ -4,7 +4,7 @@ import secrets
 import binascii
 
 from flask import Blueprint, request, jsonify
-from .model import r
+from .constants import r
 
 login = Blueprint('login', __name__)
 

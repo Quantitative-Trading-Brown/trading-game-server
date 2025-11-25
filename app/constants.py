@@ -6,3 +6,4 @@ socketio = SocketIO(
     async_mode="threading",
 )
 r = valkey.Valkey(host="localhost", port=6379, db=0, decode_responses=True)
+sid = lambda x : getattr(x, "sid", None)

@@ -1,10 +1,9 @@
 import json
 from flask import Blueprint, request, jsonify
 from flask_socketio import disconnect, join_room
-from .model import socketio, r
+from .constants import socketio, r, sid
 
 auth = Blueprint("auth", __name__)
-
 
 def verify_token(token, auth_type):
     """
@@ -16,10 +15,10 @@ def verify_token(token, auth_type):
             return None
         elif auth_type == "player":
             auth_id = int(token_components[1])
-            auth_token = r.hget("player_tokens", auth_id)
+            auth_token = r.hget("player_tokens", str(auth_id))
         elif auth_type == "admin":
             auth_id = int(token_components[1])
-            auth_token = r.hget(f"admin_tokens", auth_id)
+            auth_token = r.hget(f"admin_tokens", str(auth_id))
         else:
             return None
 
@@ -33,6 +32,9 @@ def verify_token(token, auth_type):
 @auth.route("/auth", methods=["POST"])
 def checkAuth():
     data = request.json
+    if not data:
+        return jsonify({"error": "Invalid token"}), 404
+
     token = data["token"]
 
     verify_player = verify_token(token, "player")
@@ -56,8 +58,8 @@ def player_connect():
         game_id = int(r.hget(f"user:{player_id}", "game_id"))
 
         join_room(game_id)
-        r.hset("socket_users", request.sid, player_id)
-        r.hset(f"user:{player_id}", "sid", request.sid)
+        r.hset("socket_users", sid(request), player_id)
+        r.hset(f"user:{player_id}", "sid", sid(request))
     else:
         disconnect()
 
@@ -70,13 +72,13 @@ def admin_connect():
 
     if game_id is not None:
         join_room(game_id)
-        r.hset("socket_admins", request.sid, game_id)
+        r.hset("socket_admins", sid(request), game_id)
     else:
         disconnect()
 
 
 @socketio.on("disconnect", namespace="/player")
 def player_disconnect():
-    player_id = int(r.hget("socket_users", request.sid))
+    player_id = int(r.hget("socket_users", sid(request)))
     r.hdel(f"user:{player_id}", "sid")
-    r.hdel("socket_users", request.sid)
+    r.hdel("socket_users", sid(request))
