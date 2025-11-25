@@ -1,9 +1,9 @@
 import json
 from flask import Blueprint, request, jsonify
 from flask_socketio import disconnect, join_room
-from .constants import socketio, r, sid
+from .utils import socketio, r, sid
 
-auth = Blueprint("auth", __name__)
+socket_manager = Blueprint("socket_manager", __name__)
 
 def verify_token(token, auth_type):
     """
@@ -29,7 +29,7 @@ def verify_token(token, auth_type):
 
 
 # This acts as a soft auth check on the frontend to see if a redirect is necessary
-@auth.route("/auth", methods=["POST"])
+@socket_manager.route("/auth", methods=["POST"])
 def checkAuth():
     data = request.json
     if not data:

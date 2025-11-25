@@ -2,11 +2,12 @@ from typing import Awaitable
 from collections import defaultdict
 import json
 
-from .constants import r
+from .utils import r
 
 
-def update_inventories(buyer_id, seller_id, sec_id, trade_quantity, trade_price):
-    inventory_updates = defaultdict(dict)
+def update_inventories(
+    inventory_updates, buyer_id, seller_id, sec_id, trade_quantity, trade_price
+):
     if not buyer_id.startswith("BOT"):
         inventory_updates[buyer_id][0] = float(
             r.hincrbyfloat(
@@ -38,20 +39,19 @@ def update_inventories(buyer_id, seller_id, sec_id, trade_quantity, trade_price)
                 -trade_quantity,
             )
         )
-    return inventory_updates
 
 
 def process_trade(
-    game_id,
-    initiator_id,
-    order_id,
-    orderbook_key,
-    orderside_key,
-    requested_quantity,
-    orderbook_updates,
-    order_updates,
-    inventory_updates,
-):
+    game_id: str,
+    initiator_id: str,
+    order_id: str,
+    orderbook_key: str,
+    orderside_key: str,
+    requested_quantity: int,
+    orderbook_updates: dict,
+    order_updates: dict,
+    inventory_updates: dict,
+) -> tuple[int, float]:
     order_key = f"game:{game_id}:order:{order_id}"
     order_details = r.hgetall(order_key)
     assert not isinstance(order_details, Awaitable)
@@ -60,7 +60,7 @@ def process_trade(
     counterparty_id = order_details["player_id"]
     counterparty_orders_key = f"user:{counterparty_id}:orders"
 
-    trade_price = int(order_details["price"])
+    trade_price = int(float(order_details["price"]))
     trade_quantity = min(requested_quantity, avail_quantity)
 
     buyer_id = initiator_id if order_details["side"] == "asks" else counterparty_id
@@ -78,25 +78,34 @@ def process_trade(
         if not counterparty_id.startswith("BOT"):
             order_updates[counterparty_id][order_id] = -1
 
-    orderbook_updates[trade_price] = int(
-        r.hincrby(orderbook_key, str(trade_price), trade_quantity)
+    update_quantity = (
+        trade_quantity if order_details["side"] == "asks" else -trade_quantity
     )
-    inventory_updates = inventory_updates | update_inventories(
-        buyer_id, seller_id, order_details["security"], trade_quantity, trade_price
+    orderbook_updates[trade_price] = int(
+        r.hincrby(orderbook_key, str(trade_price), update_quantity)
+    )
+
+    update_inventories(
+        inventory_updates,
+        buyer_id,
+        seller_id,
+        order_details["security"],
+        trade_quantity,
+        trade_price,
     )
 
     return trade_quantity, trade_price
 
 
 def process_residual(
-    game_id,
-    player_id,
-    sec_id,
-    orderbook_side,
-    price,
-    quantity,
-    orderbook_updates,
-    order_updates,
+    game_id: str,
+    player_id: str,
+    sec_id: str,
+    orderbook_side: str,
+    price: float,
+    quantity: int,
+    orderbook_updates: dict,
+    order_updates: dict,
 ):
     order_count = int(r.incr(f"game:{game_id}:order_count"))
     order_id = "9" * 10 * (order_count // (10**10)) + str(order_count % (10**10)).rjust(
@@ -116,20 +125,29 @@ def process_residual(
     )
 
     orderbook_price = -price if orderbook_side == "bids" else price
-    orderbook_key = f"game:{game_id}:security:{sec_id}:orderbook:{orderbook_side}"
+    orderbook_key = f"game:{game_id}:security:{sec_id}:orderbook"
+    orderside_key = f"{orderbook_key}:{orderbook_side}"
 
     r.sadd(f"user:{player_id}:orders", order_id)
-    r.zadd(orderbook_key, {order_id: orderbook_price})
+    r.zadd(orderside_key, {order_id: orderbook_price})
 
     update_quantity = quantity if orderbook_side == "bids" else -quantity
-    new_quantity = r.hincrby(orderbook_key, price, update_quantity)
+
+    new_quantity = r.hincrby(orderbook_key, str(price), update_quantity)
     orderbook_updates[price] = new_quantity
 
     if not player_id.startswith("BOT"):
         order_updates[player_id][order_id] = r.hgetall(order_key)
 
 
-def process_limit_order(game_id, player_id, sec_id, order_side, price, quantity):
+def process_limit_order(
+    game_id: str,
+    player_id: str,
+    sec_id: str,
+    order_side: str,
+    price: float,
+    quantity: int,
+) -> tuple[dict, dict]:
     orderbook_updates = defaultdict(int)
     order_updates = defaultdict(dict)  # Maps user to dict of orders -> new quantities
     inventory_updates = defaultdict(dict)
@@ -195,14 +213,15 @@ def process_limit_order(game_id, player_id, sec_id, order_side, price, quantity)
     return inventory_updates, order_updates
 
 
-def process_market_order(game_id, player_id, sec_id, order_side, quantity):
+def process_market_order(
+    game_id: str, player_id: str, sec_id: str, order_side: str, quantity: int
+):
     orderbook_updates = defaultdict(int)
     order_updates = defaultdict(dict)
     inventory_updates = defaultdict(dict)
 
     remaining_quantity = quantity
     orderbook_key = f"game:{game_id}:security:{sec_id}:orderbook"
-    user_orders_key = f"user:{player_id}:orders"
 
     order_opp = "ask" if order_side == "bid" else "bid"
     orderbook_side = "bids" if order_side == "bid" else "asks"
@@ -219,27 +238,19 @@ def process_market_order(game_id, player_id, sec_id, order_side, quantity):
             break
 
         best_order_id = best_price[0][0]
-        best_order_price = abs(best_price[0][1])  # stored as neg for bids
-
-        trade_quantity, trade_price = (
-            process_trade(
-                game_id,
-                player_id,
-                best_order_id,
-                orderbook_key,
-                opposite_set_key,
-                remaining_quantity,
-                orderbook_updates,
-                order_updates,
-                inventory_updates,
-            )
+        trade_quantity, trade_price = process_trade(
+            game_id,
+            player_id,
+            best_order_id,
+            orderbook_key,
+            opposite_set_key,
+            remaining_quantity,
+            orderbook_updates,
+            order_updates,
+            inventory_updates,
         )
 
         update_quantity = trade_quantity if order_side == "bid" else -trade_quantity
-        orderbook_updates[trade_price] = int(
-            r.hincrby(orderbook_key, str(trade_price), trade_quantity)
-        )
-
         remaining_quantity -= trade_quantity
 
     r.rpush(
@@ -250,7 +261,7 @@ def process_market_order(game_id, player_id, sec_id, order_side, quantity):
     return inventory_updates, order_updates
 
 
-def cancel_order(game_id, player_id, order_id):
+def cancel_order(game_id: str, player_id: str, order_id: str) -> tuple[dict, dict]:
     orderbook_updates = defaultdict(int)
     order_updates = defaultdict(dict)
 
@@ -289,7 +300,7 @@ def cancel_order(game_id, player_id, order_id):
     return order_security, order_updates
 
 
-def cancel_all_orders(game_id, player_id):
+def cancel_all_orders(game_id: str, player_id: str) -> dict:
     orderbook_updates = defaultdict(dict)
     order_updates = defaultdict(dict)
 
@@ -308,7 +319,9 @@ def cancel_all_orders(game_id, player_id):
         order_price = int(float(order_details["price"]))
         order_side = order_details["side"]
 
-        side_key = f"game:{game_id}:security:{order_security}:orderbook:{order_side}"
+        orderside_key = (
+            f"game:{game_id}:security:{order_security}:orderbook:{order_side}"
+        )
 
         update_quantity = -order_quantity if order_side == "bids" else order_quantity
         new_quantity = int(
@@ -324,7 +337,7 @@ def cancel_all_orders(game_id, player_id):
             order_updates[player_id][order_id] = -1
 
         r.srem(user_orders_key, order_id)
-        r.zrem(side_key, order_id)
+        r.zrem(orderside_key, order_id)
         r.delete(order_key)
 
     for security, security_orderbook_updates in orderbook_updates.items():

@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
-from .constants import socketio, r, sid
-from .exchange import (
+from typing import Awaitable
+
+from .utils import socketio, r, sid
+from .matching_engine import (
     process_limit_order,
     process_market_order,
     cancel_order,
@@ -8,15 +10,18 @@ from .exchange import (
 )
 import json
 
-gateway = Blueprint("gateway", __name__)
+order_manager = Blueprint("order_manager", __name__)
 
 
 @socketio.on("market_order", namespace="/player")
 def handle_market_order(security, order_side, quantity):
-    exc_quantity = max(1, (int, quantity))
+    exc_quantity = max(1, int(quantity))
 
     player_id = r.hget("socket_users", sid(request))
     game_id = r.hget(f"user:{player_id}", "game_id")
+
+    assert not isinstance(player_id, Awaitable) and player_id
+    assert not isinstance(game_id, Awaitable) and game_id
 
     with r.lock("everything"):
         inventory_updates, order_updates = process_market_order(
@@ -32,6 +37,7 @@ def handle_market_order(security, order_side, quantity):
         socketio.emit("inventory", inv, namespace="/player", to=trader_sid)
 
 
+
 @socketio.on("limit_order", namespace="/player")
 def handle_limit_order(security, order_side, price, quantity):
     exc_price = max(0, int(price))
@@ -39,6 +45,9 @@ def handle_limit_order(security, order_side, price, quantity):
 
     player_id = r.hget("socket_users", sid(request))
     game_id = r.hget(f"user:{player_id}", "game_id")
+
+    assert not isinstance(player_id, Awaitable) and player_id
+    assert not isinstance(game_id, Awaitable) and game_id
 
     with r.lock("everything"):
         inventory_updates, order_updates = process_limit_order(
@@ -58,6 +67,8 @@ def handle_limit_order(security, order_side, price, quantity):
 def cancel(order_id):
     player_id = r.hget("socket_users", sid(request))
     game_id = r.hget(f"user:{player_id}", "game_id")
+    assert not isinstance(player_id, Awaitable) and player_id
+    assert not isinstance(game_id, Awaitable) and game_id
 
     with r.lock("everything"):
         security, order_updates = cancel_order(game_id, player_id, order_id)
@@ -73,6 +84,8 @@ def cancel(order_id):
 def cancel_all():
     player_id = r.hget("socket_users", sid(request))
     game_id = r.hget(f"user:{player_id}", "game_id")
+    assert not isinstance(player_id, Awaitable) and player_id
+    assert not isinstance(game_id, Awaitable) and game_id
 
     with r.lock("everything"):
         order_updates = cancel_all_orders(game_id, player_id)

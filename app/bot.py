@@ -2,12 +2,12 @@ import json
 import time
 
 from .bots import bots
-from .constants import socketio, r
-from .exchange import process_limit_order, cancel_order, cancel_all_orders
+from .utils import socketio, r
+from .matching_engine import process_limit_order, cancel_order, cancel_all_orders
 
 def start_bot(game_id):
     def run_bot():
-        bot = bots["sinewave"](20, 5, 50)
+        bot = bots["flat"](50,5)
         while r.get(f"game:{game_id}:state") == "1":
             bot_cancel_all(game_id)
             for quote in bot.place_orders(
@@ -17,6 +17,7 @@ def start_bot(game_id):
                 bot_order(game_id, 1, *quote)
 
             socketio.sleep(1)  # emits once per second
+            break
 
     socketio.start_background_task(run_bot)
 
@@ -26,7 +27,7 @@ def bot_order(game_id, security, order_side, price, quantity):
     trader_id = f"BOT_{game_id}"
 
     with r.lock("everything"):
-        inventory_updates, order_updates, mrp = process_limit_order(
+        inventory_updates, order_updates = process_limit_order(
             game_id, trader_id, security, order_side, exc_price, quantity
         )
 

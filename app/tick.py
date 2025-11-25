@@ -1,6 +1,6 @@
 import json
 from typing import Awaitable
-from .constants import socketio, r
+from .utils import socketio, r
 
 
 def start_update_flusher(game_id):

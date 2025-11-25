@@ -1,9 +1,9 @@
 from flask import Blueprint, request, jsonify
 from typing import Awaitable, Any
 
-from .constants import socketio, r, sid
+from .utils import socketio, r, sid
 
-leaderboard = Blueprint("leaderboard", __name__)
+resolver = Blueprint("resolver", __name__)
 
 
 def generate_rankings(game_id):
