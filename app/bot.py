@@ -7,9 +7,8 @@ from .matching_engine import process_limit_order, cancel_order, cancel_all_order
 
 def start_bot(game_id):
     def run_bot():
-        bot = bots["flat"](50,5)
+        bot = bots["ts"]([100, 110, 120, 130, 140, 130, 120, 110], 3)
         while r.get(f"game:{game_id}:state") == "1":
-            bot_cancel_all(game_id)
             for quote in bot.place_orders(
                 int(time.time()) - int(r.get(f"game:{game_id}:timestart")),
                 r.hgetall(f"game:{game_id}:security:1:orderbook"),
@@ -17,13 +16,14 @@ def start_bot(game_id):
                 bot_order(game_id, 1, *quote)
 
             socketio.sleep(1)  # emits once per second
-            break
 
     socketio.start_background_task(run_bot)
 
 
 def bot_order(game_id, security, order_side, price, quantity):
     exc_price = max(0, int(price))
+    # Does not enforce quantity > 0
+
     trader_id = f"BOT_{game_id}"
 
     with r.lock("everything"):

@@ -200,7 +200,7 @@ def process_limit_order(
             sec_id,
             orderbook_side,
             price,
-            quantity,
+            remaining_quantity,
             orderbook_updates,
             order_updates,
         )
