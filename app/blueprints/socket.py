@@ -60,6 +60,9 @@ def admin_connect():
 
 @socketio.on("disconnect", namespace="/player")
 def player_disconnect():
-    player_id = int(extract(r.hget("socket_users", sid(request))))
+    player_id = r.hget("socket_users", sid(request))
+    if player_id is None:
+        return
+
     r.hdel(f"user:{player_id}", "sid")
     r.hdel("socket_users", sid(request))

@@ -13,7 +13,7 @@ def extract(value: Any) -> Any:
         raise RuntimeError("Async operation not supported here.")
     return value
 
-def set_state(game_id, state):
+def set_state(game_id: str, state: int) -> None:
     # Update in Redis backend
     r.set(f"game:{game_id}:state", state)
 
@@ -21,7 +21,7 @@ def set_state(game_id, state):
     socketio.emit("gamestate_update", state, namespace="/admin", to=game_id)
     socketio.emit("gamestate_update", state, namespace="/player", to=game_id)
 
-def generate_rankings(game_id):
+def generate_rankings(game_id: str) -> None:
     # Calculate player scores based on true prices and inventories
     true_prices = extract(r.hgetall(f"game:{game_id}:true_prices"))
     players = extract(r.zrangebyscore(f"game:{game_id}:users", 0, 0))
@@ -33,9 +33,8 @@ def generate_rankings(game_id):
         for sec_id in player_inv:
             score += float(true_prices[sec_id]) * float(player_inv[sec_id])
         r.zadd(f"game:{game_id}:users", {str(player_id): round(score, 2)})
-    return r.zrevrange(f"game:{game_id}:users", 0, -1, withscores=True)
 
-def flush_orderbook(game_id):
+def flush_orderbook(game_id: str) -> None:
     with r.lock("everything"):
         securities = extract(r.smembers(f"game:{game_id}:securities"))
 

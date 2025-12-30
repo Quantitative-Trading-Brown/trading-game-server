@@ -74,7 +74,7 @@ def rank_game(true_prices={}):
         r.hset(f"game:{game_id}:true_prices", sec_id, price)
 
     # Set value of cash (asset id 0) to 1
-    r.hset(f"game:{game_id}:true_prices", "0", "1")
+    r.hset(f"game:{game_id}:true_prices", "USD", "1")
 
     storage.generate_rankings(game_id)
     storage.set_state(game_id, 3)
