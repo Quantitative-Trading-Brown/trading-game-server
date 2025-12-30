@@ -2,43 +2,7 @@ from typing import Awaitable
 from collections import defaultdict
 import json
 
-from .utils import r
-
-
-def update_inventories(
-    inventory_updates, buyer_id, seller_id, sec_id, trade_quantity, trade_price
-):
-    if not buyer_id.startswith("BOT"):
-        inventory_updates[buyer_id][0] = float(
-            r.hincrbyfloat(
-                f"user:{buyer_id}:inventory",
-                "0",
-                -trade_price * trade_quantity,
-            )
-        )
-        inventory_updates[buyer_id][sec_id] = int(
-            r.hincrby(
-                f"user:{buyer_id}:inventory",
-                sec_id,
-                trade_quantity,
-            )
-        )
-
-    if not seller_id.startswith("BOT"):
-        inventory_updates[seller_id][0] = float(
-            r.hincrbyfloat(
-                f"user:{seller_id}:inventory",
-                "0",
-                trade_price * trade_quantity,
-            )
-        )
-        inventory_updates[seller_id][sec_id] = int(
-            r.hincrby(
-                f"user:{seller_id}:inventory",
-                sec_id,
-                -trade_quantity,
-            )
-        )
+from ..utils.storage import r, extract
 
 
 def process_trade(
@@ -52,9 +16,12 @@ def process_trade(
     order_updates: dict,
     inventory_updates: dict,
 ) -> tuple[int, float]:
+    """
+    Process a trade against an existing order in the orderbook.
+    """
+
     order_key = f"game:{game_id}:order:{order_id}"
-    order_details = r.hgetall(order_key)
-    assert not isinstance(order_details, Awaitable)
+    order_details = extract(r.hgetall(order_key))
 
     avail_quantity = int(float(order_details["quantity"]))
     counterparty_id = order_details["player_id"]
@@ -82,7 +49,7 @@ def process_trade(
         trade_quantity if order_details["side"] == "asks" else -trade_quantity
     )
     orderbook_updates[trade_price] = int(
-        r.hincrby(orderbook_key, str(trade_price), update_quantity)
+        extract(r.hincrby(orderbook_key, str(trade_price), update_quantity))
     )
 
     update_inventories(
@@ -97,6 +64,55 @@ def process_trade(
     return trade_quantity, trade_price
 
 
+def update_inventories(
+    inventory_updates: dict,
+    buyer_id: str,
+    seller_id: str,
+    sec_id: str,
+    trade_quantity: int,
+    trade_price: float,
+) -> None:
+    if not buyer_id.startswith("BOT"):
+        inventory_updates[buyer_id]["USD"] = float(
+            extract(
+                r.hincrbyfloat(
+                    f"user:{buyer_id}:inventory",
+                    "USD",
+                    -trade_price * trade_quantity,
+                )
+            )
+        )
+        inventory_updates[buyer_id][sec_id] = int(
+            extract(
+                r.hincrby(
+                    f"user:{buyer_id}:inventory",
+                    sec_id,
+                    trade_quantity,
+                )
+            )
+        )
+
+    if not seller_id.startswith("BOT"):
+        inventory_updates[seller_id]["USD"] = float(
+            extract(
+                r.hincrbyfloat(
+                    f"user:{seller_id}:inventory",
+                    "USD",
+                    trade_price * trade_quantity,
+                )
+            )
+        )
+        inventory_updates[seller_id][sec_id] = int(
+            extract(
+                r.hincrby(
+                    f"user:{seller_id}:inventory",
+                    sec_id,
+                    -trade_quantity,
+                )
+            )
+        )
+
+
 def process_residual(
     game_id: str,
     player_id: str,
@@ -107,7 +123,7 @@ def process_residual(
     orderbook_updates: dict,
     order_updates: dict,
 ):
-    order_count = int(r.incr(f"game:{game_id}:order_count"))
+    order_count = int(extract(r.incr(f"game:{game_id}:order_count")))
     order_id = "9" * 10 * (order_count // (10**10)) + str(order_count % (10**10)).rjust(
         10, "0"
     )
@@ -268,8 +284,7 @@ def cancel_order(game_id: str, player_id: str, order_id: str) -> tuple[dict, dic
     user_orders_key = f"user:{player_id}:orders"
     order_key = f"game:{game_id}:order:{order_id}"
 
-    order_details = r.hgetall(order_key)
-    assert not isinstance(order_details, Awaitable)
+    order_details = extract(r.hgetall(order_key))
 
     order_security = order_details["security"]
     order_quantity = int(float(order_details["quantity"]))
@@ -279,10 +294,12 @@ def cancel_order(game_id: str, player_id: str, order_id: str) -> tuple[dict, dic
     side_key = f"game:{game_id}:security:{order_security}:orderbook:{order_side}"
     update_quantity = -order_quantity if order_side == "bids" else order_quantity
     new_quantity = int(
-        r.hincrby(
-            f"game:{game_id}:security:{order_security}:orderbook",
-            order_price,
-            update_quantity,
+        extract(
+            r.hincrby(
+                f"game:{game_id}:security:{order_security}:orderbook",
+                order_price,
+                update_quantity,
+            )
         )
     )
     orderbook_updates[order_price] = new_quantity
@@ -305,14 +322,12 @@ def cancel_all_orders(game_id: str, player_id: str) -> dict:
     order_updates = defaultdict(dict)
 
     user_orders_key = f"user:{player_id}:orders"
-    user_orders = r.smembers(user_orders_key)
-    assert not isinstance(user_orders, Awaitable)
+    user_orders = extract(r.smembers(user_orders_key))
 
     for order_id in user_orders:
         order_key = f"game:{game_id}:order:{order_id}"
 
-        order_details = r.hgetall(order_key)
-        assert not isinstance(order_details, Awaitable)
+        order_details = extract(r.hgetall(order_key))
 
         order_security = order_details["security"]
         order_quantity = int(float(order_details["quantity"]))
@@ -325,10 +340,12 @@ def cancel_all_orders(game_id: str, player_id: str) -> dict:
 
         update_quantity = -order_quantity if order_side == "bids" else order_quantity
         new_quantity = int(
-            r.hincrby(
-                f"game:{game_id}:security:{order_security}:orderbook",
-                str(order_price),
-                update_quantity,
+            extract(
+                r.hincrby(
+                    f"game:{game_id}:security:{order_security}:orderbook",
+                    str(order_price),
+                    update_quantity,
+                )
             )
         )
         orderbook_updates[order_security][order_price] = new_quantity

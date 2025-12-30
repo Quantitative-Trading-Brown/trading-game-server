@@ -34,13 +34,12 @@ class TimeSeriesBot:
         target_index = int(time) % len(self.series)
         target_price = self.series[target_index]
 
-        current_bid = target_price - self.width + random.randint(-2,2)
-        current_ask = target_price + self.width + random.randint(-2,2)
+        current_bid = target_price - self.width - random.randint(0,4)
+        current_ask = target_price + self.width + random.randint(0,4)
 
         to_hit, cur_bids, cur_asks = self.count_bid_asks(
             orderbook, current_bid, current_ask
         )
-        print(to_hit, cur_bids, cur_asks)
 
         # If to_hit is positive, orderbook has bad orders on bid side
         if to_hit > 0:

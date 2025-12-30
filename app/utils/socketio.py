@@ -1,10 +1,12 @@
 from flask_socketio import SocketIO
-import valkey
 
 socketio = SocketIO(
     cors_allowed_origins=["https://simulator.qtab.site", "http://localhost:3000"],
     async_mode="threading",
 )
-sid = lambda x : getattr(x, "sid", None)
 
-r = valkey.Valkey(host="localhost", port=6379, db=0, decode_responses=True)
+def sid(request) -> str:
+    if s := getattr(request, "sid", None):
+        return s
+
+    raise RuntimeError("No SID found in request.")

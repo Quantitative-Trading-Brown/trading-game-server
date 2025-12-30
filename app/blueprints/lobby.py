@@ -5,33 +5,24 @@ import binascii
 
 from typing import Awaitable
 from flask import Blueprint, request, jsonify
-from .utils import r
+
+from ..utils.storage import r, extract
+
+from ..utils import tokens
 
 lobby_manager = Blueprint("lobby_manager", __name__)
 
-
-def generate_code(length=6):
-    """Generate a random alphanumeric game code."""
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=length))
-
-
-def generate_token(prefix, length=32):
-    """Generate a random token."""
-    return prefix + binascii.hexlify(secrets.token_bytes(length)).decode("utf-8")
-
-
 @lobby_manager.route("/create-game", methods=["POST"])
 def create_game():
-    game_codes = r.hgetall("codes")
-    assert not isinstance(game_codes, Awaitable)
+    game_codes = extract(r.hgetall("codes"))
 
-    code = generate_code()
+    code = tokens.generate_code()
     # Check if game code exists
     while code in game_codes:
-        code = generate_code()
+        code = tokens.generate_code()
 
     game_id = r.incr("game_count")
-    admin_token = generate_token(prefix=f"admin-{game_id}-")
+    admin_token = tokens.generate_token(prefix=f"admin-{game_id}-")
 
     r.hset("codes", code, str(game_id))
     r.hset(f"game:{game_id}", "code", code)
@@ -43,8 +34,7 @@ def create_game():
 
 @lobby_manager.route("/join-game", methods=["POST"])
 def join_game():
-    game_codes = r.hgetall("codes")
-    assert not isinstance(game_codes, Awaitable)
+    game_codes = extract(r.hgetall("codes"))
 
     data = request.json
     if not data:
@@ -64,8 +54,7 @@ def join_game():
         return jsonify({"error": "Username cannot be empty"}), 400
 
     # Check if player name exists
-    player_ids = r.zrange(f"game:{game_id}:users", 0, -1)
-    assert not isinstance(player_ids, Awaitable)
+    player_ids = extract(r.zrange(f"game:{game_id}:users", 0, -1))
 
     usernames = [r.hget(f"user:{player_id}", "username") for player_id in player_ids]
 
@@ -73,7 +62,7 @@ def join_game():
         return jsonify({"error": "Player name already exists"}), 400
 
     player_id = r.incr("player_count")
-    player_token = generate_token(prefix=f"player-{player_id}-")
+    player_token = tokens.generate_token(prefix=f"player-{player_id}-")
 
     r.hset(f"user:{player_id}", "username", username)
     r.hset(f"user:{player_id}", "game_id", game_id)

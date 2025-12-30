@@ -1,35 +1,50 @@
 import logging
-
 from flask import Flask
 from flask_cors import CORS
-from .config import Config
-from .utils import socketio, r
 
-def create_app(config_class=Config):
-    logging.getLogger('werkzeug').disabled = True
+from .utils.socketio import socketio
+from .utils.storage import r
 
-    app = Flask(__name__)
-    app.config.from_object(config_class)  # Load configuration from Config class
-    CORS(app, origins=["http://localhost:3000", "https://simulator.qtab.site"])
+
+def create_app(test_config=None):
+    logging.getLogger("werkzeug").disabled = True
+
+    app = Flask(__name__, instance_relative_config=True)
+
+    if test_config is None:
+        app.config.from_pyfile("application.cfg")
+    else:
+        app.config.from_mapping(test_config)
+
+    CORS(app, origins=app.config["CORS_ORIGINS"])
 
     socketio.init_app(app)
 
     with app.app_context():
         r.flushall()
 
-    from .lobby_manager import lobby_manager as lobby_blueprint
-    app.register_blueprint(lobby_blueprint)
+    from .blueprints import lobby_manager
 
-    from .game_manager import game_manager as game_blueprint
-    app.register_blueprint(game_blueprint)
+    app.register_blueprint(lobby_manager)
 
-    from .snapshot_manager import snapshot_manager as snapshot_blueprint
-    app.register_blueprint(snapshot_blueprint)
+    from .blueprints import game_manager
 
-    from .order_manager import order_manager as order_blueprint
-    app.register_blueprint(order_blueprint)
+    app.register_blueprint(game_manager)
 
-    from .socket_manager import socket_manager as socket_blueprint
-    app.register_blueprint(socket_blueprint)
+    from .blueprints import snapshot_manager
+
+    app.register_blueprint(snapshot_manager)
+
+    from .blueprints import order_manager
+
+    app.register_blueprint(order_manager)
+
+    from .blueprints import socket_manager
+
+    app.register_blueprint(socket_manager)
+
+    from .blueprints import leaderboard_manager
+
+    app.register_blueprint(leaderboard_manager)
 
     return app
