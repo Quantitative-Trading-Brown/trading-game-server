@@ -1,14 +1,14 @@
 from flask import Blueprint, request, jsonify
 from typing import Awaitable, Any
 
-from ..utils.socketio import socketio, sid
-from ..utils.storage import r, extract
+from ..utils import helpers
+from ..utils.services import *
 
 leaderboard_manager = Blueprint("leaderboard_manager", __name__)
 
 @socketio.on("leaderboard", namespace="/admin")
 def admin_leaderboard():
-    game_id = int(extract(r.hget("socket_admins", sid(request))))
+    game_id, _ = helpers.identify(sid(request))
 
     results = extract(r.zrevrange(f"game:{game_id}:users", 0, -1, withscores=True))
 
@@ -20,8 +20,7 @@ def admin_leaderboard():
 
 @socketio.on("leaderboard", namespace="/player")
 def player_leaderboard():
-    player_id = int(extract(r.hget("socket_users", sid(request))))
-    game_id = int(extract(r.hget(f"user:{player_id}", "game_id")))
+    game_id, player_id = helpers.identify(sid(request))
 
     results = extract(r.zrevrange(f"game:{game_id}:users", 0, -1, withscores=True))
 

@@ -3,8 +3,9 @@ from flask import Blueprint, request, jsonify
 from flask_socketio import disconnect, join_room
 
 from ..utils.socketio import socketio, sid
-from ..utils.storage import r, extract
-from ..utils.tokens import verify_token
+
+from ..utils import helpers
+from ..utils.services import *
 
 socket_manager = Blueprint("socket_manager", __name__)
 
@@ -18,11 +19,11 @@ def checkAuth():
 
     token = data["token"]
 
-    verify_player = verify_token(token, "player")
+    verify_player = helpers.verify_token(token, "player")
     if verify_player is not None:
         return jsonify({"type": "player"}), 201
 
-    verify_admin = verify_token(token, "admin")
+    verify_admin = helpers.verify_token(token, "admin")
     if verify_admin is not None:
         return jsonify({"type": "admin"}), 201
 
@@ -33,7 +34,7 @@ def checkAuth():
 def player_connect():
     # Extract token from the query parameters
     token = request.args.get("token")
-    player_id = verify_token(token, "player")
+    player_id = helpers.verify_token(token, "player")
 
     if player_id is not None:
         game_id = int(extract(r.hget(f"user:{player_id}", "game_id")))
@@ -49,7 +50,7 @@ def player_connect():
 def admin_connect():
     # Extract token from the query parameters
     token = request.args.get("token")
-    game_id = verify_token(token, "admin")
+    game_id = helpers.verify_token(token, "admin")
 
     if game_id is not None:
         join_room(game_id)

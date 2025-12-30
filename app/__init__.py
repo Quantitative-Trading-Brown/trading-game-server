@@ -2,9 +2,7 @@ import logging
 from flask import Flask
 from flask_cors import CORS
 
-from .utils.socketio import socketio
-from .utils.storage import r
-
+from .utils.services import *
 
 def create_app(test_config=None):
     logging.getLogger("werkzeug").disabled = True
