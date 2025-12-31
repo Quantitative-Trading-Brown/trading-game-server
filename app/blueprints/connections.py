@@ -2,39 +2,17 @@ import json
 from flask import Blueprint, request, jsonify
 from flask_socketio import disconnect, join_room
 
-from ..utils.socketio import socketio, sid
+from ..auth import tokens
+from ..services import *
 
-from ..utils import helpers
-from ..utils.services import *
-
-socket_manager = Blueprint("socket_manager", __name__)
-
-
-# This acts as a soft auth check on the frontend to see if a redirect is necessary
-@socket_manager.route("/auth", methods=["POST"])
-def checkAuth():
-    data = request.json
-    if not data:
-        return jsonify({"error": "Invalid token"}), 404
-
-    token = data["token"]
-
-    verify_player = helpers.verify_token(token, "player")
-    if verify_player is not None:
-        return jsonify({"type": "player"}), 201
-
-    verify_admin = helpers.verify_token(token, "admin")
-    if verify_admin is not None:
-        return jsonify({"type": "admin"}), 201
-
-    return jsonify({"error": "Invalid token"}), 404
+blueprint = Blueprint("connections", __name__)
 
 
 @socketio.on("connect", namespace="/player")
 def player_connect():
     # Extract token from the query parameters
     token = request.args.get("token")
-    player_id = helpers.verify_token(token, "player")
+    player_id = tokens.verify_token(token, "player")
 
     if player_id is not None:
         game_id = int(extract(r.hget(f"user:{player_id}", "game_id")))
@@ -50,7 +28,7 @@ def player_connect():
 def admin_connect():
     # Extract token from the query parameters
     token = request.args.get("token")
-    game_id = helpers.verify_token(token, "admin")
+    game_id = tokens.verify_token(token, "admin")
 
     if game_id is not None:
         join_room(game_id)

@@ -1,10 +1,10 @@
 import json, os
+import numpy as np
 from flask import current_app
 
-from .utils.services import *
+from ..services import *
 
-from .bots.bot_manager import BotManager
-import numpy as np
+from ..bots.bot_manager import BotManager
 
 
 class GameSetup:

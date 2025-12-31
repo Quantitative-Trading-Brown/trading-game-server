@@ -1,14 +1,14 @@
 import time, os
-from collections import defaultdict
 import numpy as np
+
+from collections import defaultdict
 from flask import current_app
 
+from ..services import *
+
+from ..trading import entry, cancellation
+
 from .templates import *
-from ..utils.storage import r
-from ..utils.socketio import socketio
-
-from ..matching_engine import matching_engine as me
-
 
 class BotManager:
     def __init__(self, bot_config):
@@ -59,7 +59,7 @@ class BotManager:
         trader_id = f"BOT_{game_id}"
 
         with r.lock("everything"):
-            inventory_updates, order_updates = me.process_limit_order(
+            inventory_updates, order_updates = entry.process_limit_order(
                 game_id, trader_id, security, order_side, exc_price, exc_qty
             )
 
@@ -75,7 +75,7 @@ class BotManager:
         trader_id = f"BOT_{game_id}"
 
         with r.lock("everything"):
-            security, order_updates = me.cancel_order(game_id, trader_id, order_id)
+            security, order_updates = cancellation.cancel_order(game_id, trader_id, order_id)
 
         for trader_id in order_updates:
             trader_sid = r.hget("user:{trader_id}", "sid")
@@ -87,4 +87,4 @@ class BotManager:
         trader_id = f"BOT_{game_id}"
 
         with r.lock("everything"):
-            order_updates = me.cancel_all_orders(game_id, trader_id)
+            order_updates = cancellation.cancel_all_orders(game_id, trader_id)

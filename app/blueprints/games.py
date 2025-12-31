@@ -6,12 +6,33 @@ import binascii
 from typing import Awaitable
 from flask import Blueprint, request, jsonify
 
-from ..utils.services import *
-from ..utils import tokens
+from ..services import *
+from ..auth import tokens
 
-lobby_manager = Blueprint("lobby_manager", __name__)
+blueprint = Blueprint("game", __name__)
 
-@lobby_manager.route("/create-game", methods=["POST"])
+
+# This acts as a soft auth check on the frontend to see if a redirect is necessary
+@blueprint.route("/auth", methods=["POST"])
+def check_auth():
+    data = request.json
+    if not data:
+        return jsonify({"error": "Invalid token"}), 404
+
+    token = data["token"]
+
+    verify_player = tokens.verify_token(token, "player")
+    if verify_player is not None:
+        return jsonify({"type": "player"}), 201
+
+    verify_admin = tokens.verify_token(token, "admin")
+    if verify_admin is not None:
+        return jsonify({"type": "admin"}), 201
+
+    return jsonify({"error": "Invalid token"}), 404
+
+
+@blueprint.route("/create-game", methods=["POST"])
 def create_game():
     game_codes = extract(r.hgetall("codes"))
 
@@ -31,7 +52,7 @@ def create_game():
     return jsonify({"code": code, "token": admin_token}), 201
 
 
-@lobby_manager.route("/join-game", methods=["POST"])
+@blueprint.route("/join-game", methods=["POST"])
 def join_game():
     game_codes = extract(r.hgetall("codes"))
 
