@@ -10,32 +10,24 @@ blueprint = Blueprint("order", __name__)
 
 
 @socketio.on("market_order", namespace="/player")
-def market_order(security, order_side, quantity):
+def market_order(sec_id, side, quantity):
     game_id, issuer_id = identity.identify(sid(request))
 
-    exc_quantity = max(1, int(quantity))
+    exc_qty = max(1, int(quantity))
 
     with r.lock("everything"):
-        update = entry.process_market_order(
-            game_id, issuer_id, security, order_side, quantity
-        )
-
-        update.apply()
+        entry.process_market_order(game_id, issuer_id, sec_id, side, exc_qty)
 
 
 @socketio.on("limit_order", namespace="/player")
-def limit_order(security, order_side, price, quantity):
+def limit_order(sec_id, side, price, quantity):
     game_id, issuer_id = identity.identify(sid(request))
 
     exc_price = max(0, int(price))
-    exc_quantity = max(1, int(quantity))
+    exc_qty = max(1, int(quantity))
 
     with r.lock("everything"):
-        update = entry.process_limit_order(
-            game_id, issuer_id, security, order_side, exc_price, quantity
-        )
-
-        update.apply()
+        entry.process_limit_order(game_id, issuer_id, sec_id, side, exc_price, exc_qty)
 
 
 @socketio.on("cancel", namespace="/player")
@@ -43,9 +35,7 @@ def cancel(order_id):
     game_id, issuer_id = identity.identify(sid(request))
 
     with r.lock("everything"):
-        update = cancellation.cancel_order(game_id, issuer_id, order_id)
-
-        update.apply()
+        cancellation.cancel_order(game_id, issuer_id, order_id)
 
 
 @socketio.on("cancel_all", namespace="/player")
@@ -53,6 +43,4 @@ def cancel_all():
     game_id, issuer_id = identity.identify(sid(request))
 
     with r.lock("everything"):
-        update = cancellation.cancel_all_orders(game_id, issuer_id)
-
-        update.apply()
+        cancellation.cancel_all_orders(game_id, issuer_id)

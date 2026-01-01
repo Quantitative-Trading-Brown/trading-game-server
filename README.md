@@ -2,8 +2,9 @@
 
 ## Todo
 - ~~Implement preset JSON loading~~
-- Document the preset JSON
-- Implement margin accounts and bankruptcy
+- Document the preset JSON and CSVs
+- Implement reserve accounts for short and bankruptcy
+- Keyboard shortcuts
 - Research smoothing for bot impact on orderbook
   - Just use 100% aggressiveness for now
 - Create some cool scenarios

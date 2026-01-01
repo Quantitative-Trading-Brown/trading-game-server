@@ -6,7 +6,7 @@ from ..services import *
 
 from ..auth import identity
 from ..control import setup, state, resolution
-from ..clock import clock
+from ..clock import tick
 
 
 blueprint = Blueprint("controller", __name__)
@@ -53,7 +53,7 @@ def start_game(preset):
     game_setup.apply(game_id)
 
     state.set_state(game_id, 1)
-    clock.clock_start(game_id, game_setup)
+    tick.clock_start(game_id, game_setup)
 
 
 @socketio.on("endgame", namespace="/admin")

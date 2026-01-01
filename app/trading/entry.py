@@ -13,7 +13,7 @@ def process_limit_order(
     order_side: str,
     price: float,
     quantity: int,
-) -> TradeUpdate:
+) -> None:
     to_update = TradeUpdate(game_id, sec_id)
 
     # In Redis storage, prices for bids in the sorted set of the orderbook are negative to facilitate sorting
@@ -49,10 +49,7 @@ def process_limit_order(
 
     # Put in new order if there is residual in the request
     if remaining_quantity > 0:
-        mult = 1 if orderbook_side == "bids" else -1
-        to_update.orderbook_updates[price] += remaining_quantity * mult
-
-        to_update.new_orders.append(
+        to_update.new_orders[issuer_id].append(
             {
                 "security": sec_id,
                 "side": orderbook_side,
@@ -62,12 +59,12 @@ def process_limit_order(
             }
         )
 
-    return to_update
+    to_update.apply()
 
 
 def process_market_order(
     game_id: str, issuer_id: str, sec_id: str, order_side: str, quantity: int
-) -> TradeUpdate:
+) -> None:
     to_update = TradeUpdate(game_id, sec_id)
 
     remaining_quantity = quantity
@@ -89,8 +86,8 @@ def process_market_order(
         best_order_id = best_price[0][0]
         trade_quantity, trade_price = process_trade(
             game_id,
-            issuer_id,
             best_order_id,
+            issuer_id,
             remaining_quantity,
             to_update,
         )
@@ -98,7 +95,7 @@ def process_market_order(
         update_quantity = trade_quantity if order_side == "bid" else -trade_quantity
         remaining_quantity -= trade_quantity
 
-    return to_update
+    to_update.apply()
 
 
 def process_trade(
@@ -114,23 +111,23 @@ def process_trade(
     order_key = f"game:{game_id}:order:{order_id}"
     order_details = extract(r.hgetall(order_key))
 
-    counterparty_id = order_details["player_id"]
+    issuer_id = order_details["issuer_id"]
     trade_price = int(float(order_details["price"]))
 
     avail_quantity = int(float(order_details["quantity"]))
     trade_quantity = min(requested_quantity, avail_quantity)
 
-    # Update quantity in orderbook if old order residual exists, else knock it out completely
+    # Update order if old order residual exists, else knock it out completely
     if avail_quantity > trade_quantity:
-        to_update.order_updates[order_id] -= trade_quantity
+        to_update.updated_orders[issuer_id][order_id] = (
+            -trade_quantity,
+            avail_quantity - trade_quantity,
+        )
     else:
-        to_update.deleted_orders.append(order_id)
+        to_update.deleted_orders[issuer_id].append(order_id)
 
-    mult = 1 if order_details["side"] == "asks" else -1
-    to_update.orderbook_updates[trade_price] += trade_quantity * mult
-
-    buyer_id = initiator_id if order_details["side"] == "asks" else counterparty_id
-    seller_id = initiator_id if order_details["side"] == "bids" else counterparty_id
+    buyer_id = initiator_id if order_details["side"] == "asks" else issuer_id
+    seller_id = initiator_id if order_details["side"] == "bids" else issuer_id
 
     to_update.inventory_updates[buyer_id]["USD"] -= trade_price * trade_quantity
     to_update.inventory_updates[seller_id]["USD"] += trade_price * trade_quantity

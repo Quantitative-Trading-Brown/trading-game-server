@@ -29,11 +29,11 @@ def make_snapshot(game_id, player_id=None):
         "past_news": past_news,
     }
 
-    if player_id:
-        orders = extract(r.smembers(f"user:{player_id}:orders"))
+    if player_id is not None:
+        oids = extract(r.smembers(f"user:{player_id}:orders"))
 
         snapshot["username"] = r.hget(f"user:{player_id}", "username")
         snapshot["inventory"] = r.hgetall(f"user:{player_id}:inventory")
-        snapshot["orders"] = {o: r.hgetall(f"game:{game_id}:order:{o}") for o in orders}
+        snapshot["orders"] = {oid: r.hgetall(f"game:{game_id}:order:{oid}") for oid in oids}
 
     return snapshot

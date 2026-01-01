@@ -14,7 +14,7 @@ class GameSetup:
 
         self.game_ticks = config.get("game_ticks", 100)
         self.tick_length = config.get("tick_length", 1)
-        self.securities = config.get("securities", [])
+        self.securities = config.get("securities", {})
         self.bot_manager = BotManager(config.get("bots", []))
 
     def apply(self, game_id):

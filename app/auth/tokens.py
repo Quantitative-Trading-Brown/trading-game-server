@@ -12,7 +12,7 @@ def generate_token(prefix, length=32):
     return prefix + binascii.hexlify(secrets.token_bytes(length)).decode("utf-8")
 
 
-def verify_token(token, auth_type):
+def verify_token(token: str, auth_type: str) -> str | None:
     """
     Returns player object if user_type is player otherwise game object if user_type is admin
     """

@@ -15,7 +15,7 @@ def player_connect():
     player_id = tokens.verify_token(token, "player")
 
     if player_id is not None:
-        game_id = int(extract(r.hget(f"user:{player_id}", "game_id")))
+        game_id = extract(r.hget(f"user:{player_id}", "game_id"))
 
         join_room(game_id)
         r.hset("socket_users", sid(request), player_id)
