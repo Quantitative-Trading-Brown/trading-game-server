@@ -3,3 +3,4 @@ qtab_env
 server-venv/
 .env/
 instance/
+credentials/

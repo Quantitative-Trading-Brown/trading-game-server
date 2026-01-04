@@ -1,5 +1,7 @@
 from ..services import *
 import random, binascii, secrets, string
+from typing import Optional
+import hmac
 
 
 def generate_code(length=6):
@@ -12,24 +14,28 @@ def generate_token(prefix, length=32):
     return prefix + binascii.hexlify(secrets.token_bytes(length)).decode("utf-8")
 
 
-def verify_token(token: str, auth_type: str) -> str | None:
+def verify_token(token: str, auth_type: str) -> Optional[str]:
     """
-    Returns player object if user_type is player otherwise game object if user_type is admin
+    Returns player_id if user_type is player otherwise admin_id if user_type is admin
+    Returns None if token is invalid
     """
     token_components = token.split("-")
-    try:
-        if auth_type != token_components[0] or len(token_components) != 3:
-            return None
-        elif auth_type == "player":
-            auth_id = token_components[1]
-            auth_token = extract(r.hget("player_tokens", auth_id))
-        elif auth_type == "admin":
-            auth_id = token_components[1]
-            auth_token = extract(r.hget(f"admin_tokens", auth_id))
-        else:
-            return None
 
-        return auth_id if token == auth_token else None
-    except Exception as e:
-        print("Authentication error:", e)
+    if len(token_components) != 3:
+        return None
+
+    prefix, auth_id, token_value = token_components
+
+    if auth_type != prefix:
+        return None
+
+    try:
+        key_name = f"{auth_type}_tokens"
+        stored_token = extract(r.hget(key_name, auth_id))
+
+        if hmac.compare_digest(token, stored_token):
+            return auth_id
+        return None
+
+    except Exception:
         return None

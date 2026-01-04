@@ -3,6 +3,9 @@
 ## Todo
 - ~~Implement preset JSON loading~~
 - Document the preset JSON and CSVs
+- Implement local IP detection through Firebase
+  - On server start, update firebase with ip and name
+  - Make server selection popup on main page of frontend
 - Implement reserve accounts for short and bankruptcy
 - Keyboard shortcuts
 - Research smoothing for bot impact on orderbook

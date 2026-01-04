@@ -25,8 +25,9 @@ def process_limit_order(
     orderbook_key = f"game:{game_id}:security:{sec_id}:orderbook"  # Raw orderbook
     opposite_set_key = f"{orderbook_key}:{orderbook_opp}"  # List of opposite orders sorted by price and recency
 
+    orders_processed = 0
     while remaining_quantity > 0:
-        best_price = r.zrange(opposite_set_key, 0, 0, withscores=True)
+        best_price = r.zrange(opposite_set_key, orders_processed, orders_processed, withscores=True)
 
         if (
             not best_price
@@ -46,6 +47,7 @@ def process_limit_order(
         )
 
         remaining_quantity -= trade_quantity
+        orders_processed += 1
 
     # Put in new order if there is residual in the request
     if remaining_quantity > 0:
@@ -76,8 +78,11 @@ def process_market_order(
     opposite_set_key = f"{orderbook_key}:{orderbook_opp}"
 
     # Market order continues consuming liquidity until empty
+    orders_processed = 0
     while remaining_quantity > 0:
-        best_price = r.zrange(opposite_set_key, 0, 0, withscores=True)
+        best_price = r.zrange(
+            opposite_set_key, orders_processed, orders_processed, withscores=True
+        )
 
         # No liquidity available
         if not best_price:
@@ -94,6 +99,8 @@ def process_market_order(
 
         update_quantity = trade_quantity if order_side == "bid" else -trade_quantity
         remaining_quantity -= trade_quantity
+
+        orders_processed += 1
 
     to_update.apply()
 
