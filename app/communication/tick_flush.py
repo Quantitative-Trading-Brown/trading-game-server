@@ -31,12 +31,15 @@ def flush(game_id: str, securities: dict) -> None:
         players = extract(r.smembers(f"game:{game_id}:players"))
 
         for player_id in players:
+            trader_sid = extract(r.hget(f"player:{player_id}", "sid"))
+            if trader_sid is None:
+                continue
+
             position_value = extract(
                 r.get(f"player:{player_id}:inventory:position_value")
             )
             margin = extract(r.get(f"player:{player_id}:inventory:margin"))
 
-            trader_sid = extract(r.hget(f"player:{player_id}", "sid"))
 
             socketio.emit(
                 "inventory",
