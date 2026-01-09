@@ -96,7 +96,7 @@ class Executor:
 
         # Emit order updates to traders
         for trader_id, updates in self.__cum_order_update.items():
-            if trader_id == "bot":
+            if trader_id.startswith("_bot_"):
                 continue
             trader_sid = r.hget(f"player:{trader_id}", "sid")
             socketio.emit(
@@ -121,7 +121,7 @@ class Executor:
 
     def apply_inventory(self):
         for trader_id, qty_change in self.inventory_update.items():
-            if trader_id == "bot":  # Ignore bot inventory
+            if trader_id.startswith("_bot_"):  # Ignore bot inventory
                 continue
 
             cash = extract(
