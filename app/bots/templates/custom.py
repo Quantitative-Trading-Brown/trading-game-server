@@ -17,9 +17,9 @@ class TimeSeriesBot:
 
         for p_str, qty in orderbook.items():
             q = int(qty)
-            if int(p_str) <= price_low:
+            if float(p_str) <= price_low:
                 to_hit_count -= (q < 0) * abs(q)
-            if int(p_str) >= price_high:
+            if float(p_str) >= price_high:
                 to_hit_count += (q > 0) * abs(q)
 
         existing_bids = int(orderbook.get(str(price_low), 0))
@@ -34,8 +34,8 @@ class TimeSeriesBot:
         target_index = int(time) % len(self.series)
         target_price = self.series[target_index]
 
-        current_bid = target_price - self.width - random.randint(0,4)
-        current_ask = target_price + self.width + random.randint(0,4)
+        current_bid = float(target_price - self.width - random.randint(0,4))
+        current_ask = float(target_price + self.width + random.randint(0,4))
 
         to_hit, cur_bids, cur_asks = self.count_bid_asks(
             orderbook, current_bid, current_ask

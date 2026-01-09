@@ -9,9 +9,7 @@ r = valkey.Valkey(host="localhost", port=6379, db=0, decode_responses=True)
 socketio = SocketIO(async_mode="threading")
 
 
-def extract(value: Any) -> Any:
-    if value is None:
-        raise RuntimeError("No value found.")
+def extract(value: Awaitable[Any] | Any) -> Any:
     if isinstance(value, Awaitable):
         raise RuntimeError("Async operation not supported here.")
     return value

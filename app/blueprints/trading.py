@@ -1,18 +1,26 @@
+"""
+Trading-related socket event handlers.
+
+market_order: Handle market order submissions
+limit_order: Handle limit order submissions
+cancel: Handle order cancellations
+cancel_all: Handle cancellation of all orders for a player
+"""
+
 import json
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request
 
-from ..auth import identity
-from ..trading import entry, cancellation
-from ..services import *
+from app.overseer import identity
+from app.exchange import entry, cancellation
+from app.services import *
 
-blueprint = Blueprint("order", __name__)
+blueprint = Blueprint("trading", __name__)
 
 
 @socketio.on("market_order", namespace="/player")
 def market_order(sec_id, side, quantity):
     game_id, issuer_id = identity.identify(sid(request))
-
     exc_qty = max(1, int(quantity))
 
     with r.lock("everything"):
@@ -22,7 +30,6 @@ def market_order(sec_id, side, quantity):
 @socketio.on("limit_order", namespace="/player")
 def limit_order(sec_id, side, price, quantity):
     game_id, issuer_id = identity.identify(sid(request))
-
     exc_price = max(0, int(price))
     exc_qty = max(1, int(quantity))
 

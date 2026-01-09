@@ -10,7 +10,7 @@ from .blueprints import blueprints
 from .services import *
 
 
-def upload_local_ip(app):
+def upload_address(app):
     cred = credentials.Certificate(
         os.path.join(app.instance_path, app.config["FIREBASE_CREDENTIALS"])
     )
@@ -18,18 +18,10 @@ def upload_local_ip(app):
 
     db = firestore.client()
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    try:
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-    finally:
-        s.close()
-
     db.collection("servers").document(app.config["FIREBASE_DOC"]).set(
         {
             "name": app.config["FIREBASE_NAME"],
-            "ip": "http://" + local_ip,
+            "ip": app.config["FIREBASE_ADDRESS"],
         }
     )
 
@@ -39,20 +31,29 @@ def create_app(test_config=None):
 
     app = Flask(__name__, instance_relative_config=True)
 
-    if test_config is None:
-        app.config.from_pyfile("application.cfg")
-    else:
-        app.config.from_mapping(test_config)
+    app.config.from_pyfile("application.cfg")
+
+    if app.config["FIREBASE_UPLOAD"]:
+        upload_address(app)
 
     CORS(app, origins=app.config["CORS_ORIGINS"])
 
-    upload_local_ip(app)
     socketio.init_app(app, cors_allowed_origins=app.config["CORS_ORIGINS"])
+
+    for blueprint in blueprints:
+        app.register_blueprint(blueprint)
 
     with app.app_context():
         r.flushall()
 
-    for blueprint in blueprints:
-        app.register_blueprint(blueprint)
+        if app.config["DEBUG"] and os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+            from .overseer import game_manager
+
+            game_id, code, _ = game_manager.create_game()
+            print(code)
+
+            from .state import states
+
+            states.setup_to_live(game_id, "SP")
 
     return app
