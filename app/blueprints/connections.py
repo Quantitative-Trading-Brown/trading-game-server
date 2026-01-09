@@ -1,53 +1,33 @@
-import json
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request
 from flask_socketio import disconnect, join_room
 
-from ..auth import tokens
-from ..services import *
+from app.services import *
+from app.overseer import validation
 
 blueprint = Blueprint("connections", __name__)
 
 
-@blueprint.route("/", methods=["GET"])
-def test():
-    return "", 204
-
-
 @socketio.on("connect", namespace="/player")
 def player_connect():
-    # Extract token from the query parameters
-    token = request.args.get("token")
-    player_id = tokens.verify_token(token, "player")
-
-    if player_id is not None:
-        game_id = extract(r.hget(f"user:{player_id}", "game_id"))
-
+    if game_id := validation.new_player_connection(request):
         join_room(game_id)
-        r.hset("socket_users", sid(request), player_id)
-        r.hset(f"user:{player_id}", "sid", sid(request))
     else:
         disconnect()
 
 
 @socketio.on("connect", namespace="/admin")
 def admin_connect():
-    # Extract token from the query parameters
-    token = request.args.get("token")
-    game_id = tokens.verify_token(token, "admin")
-
-    if game_id is not None:
+    if game_id := validation.new_admin_connection(request):
         join_room(game_id)
-        r.hset("socket_admins", sid(request), game_id)
     else:
         disconnect()
 
 
 @socketio.on("disconnect", namespace="/player")
 def player_disconnect():
-    player_id = r.hget("socket_users", sid(request))
-    r.hdel("socket_users", sid(request))
-
+    player_id = r.hget("player_sockets", sid(request))
     if player_id is None:
         return
 
-    r.hdel(f"user:{player_id}", "sid")
+    r.hdel("player_sockets", sid(request))
+    r.hdel(f"player:{player_id}", "sid")

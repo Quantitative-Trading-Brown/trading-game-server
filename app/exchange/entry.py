@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from ..services import *
 
-from .trade_update import TradeUpdate
+from .executor import Executor
 
 
 def process_limit_order(
@@ -14,7 +14,7 @@ def process_limit_order(
     price: float,
     quantity: int,
 ) -> None:
-    to_update = TradeUpdate(game_id, sec_id)
+    executor = Executor(game_id, sec_id)
 
     # In Redis storage, prices for bids in the sorted set of the orderbook are negative to facilitate sorting
     # Prices in order details are always positive
@@ -27,23 +27,25 @@ def process_limit_order(
 
     orders_processed = 0
     while remaining_quantity > 0:
-        best_price = r.zrange(opposite_set_key, orders_processed, orders_processed, withscores=True)
+        best_in_orderbook = r.zrange(
+            opposite_set_key, orders_processed, orders_processed, withscores=True
+        )
 
         if (
-            not best_price
-            or (order_side == "ask" and abs(best_price[0][1]) < price)
-            or (order_side == "bid" and abs(best_price[0][1]) > price)
+            not best_in_orderbook
+            or (order_side == "ask" and abs(best_in_orderbook[0][1]) < price)
+            or (order_side == "bid" and abs(best_in_orderbook[0][1]) > price)
         ):
             break
 
-        best_order_id = best_price[0][0]
+        best_order_id = best_in_orderbook[0][0]
 
         trade_quantity, trade_price = process_trade(
             game_id,
             best_order_id,
             issuer_id,
             remaining_quantity,
-            to_update,
+            executor,
         )
 
         remaining_quantity -= trade_quantity
@@ -51,7 +53,7 @@ def process_limit_order(
 
     # Put in new order if there is residual in the request
     if remaining_quantity > 0:
-        to_update.new_orders[issuer_id].append(
+        executor.new_orders[issuer_id].append(
             {
                 "security": sec_id,
                 "side": orderbook_side,
@@ -61,13 +63,13 @@ def process_limit_order(
             }
         )
 
-    to_update.apply()
+    executor.apply()
 
 
 def process_market_order(
     game_id: str, issuer_id: str, sec_id: str, order_side: str, quantity: int
 ) -> None:
-    to_update = TradeUpdate(game_id, sec_id)
+    executor = Executor(game_id, sec_id)
 
     remaining_quantity = quantity
     orderbook_key = f"game:{game_id}:security:{sec_id}:orderbook"
@@ -94,7 +96,7 @@ def process_market_order(
             best_order_id,
             issuer_id,
             remaining_quantity,
-            to_update,
+            executor,
         )
 
         update_quantity = trade_quantity if order_side == "bid" else -trade_quantity
@@ -102,7 +104,7 @@ def process_market_order(
 
         orders_processed += 1
 
-    to_update.apply()
+    executor.apply()
 
 
 def process_trade(
@@ -110,7 +112,7 @@ def process_trade(
     order_id: str,
     initiator_id: str,
     requested_quantity: int,
-    to_update: TradeUpdate,
+    executor: Executor,
 ) -> tuple[int, float]:
     """
     Process a trade against an existing order in the orderbook.
@@ -126,20 +128,20 @@ def process_trade(
 
     # Update order if old order residual exists, else knock it out completely
     if avail_quantity > trade_quantity:
-        to_update.updated_orders[issuer_id][order_id] = (
+        executor.updated_orders[issuer_id][order_id] = (
             -trade_quantity,
             avail_quantity - trade_quantity,
         )
     else:
-        to_update.deleted_orders[issuer_id].append(order_id)
+        executor.deleted_orders[issuer_id].append(order_id)
 
     buyer_id = initiator_id if order_details["side"] == "asks" else issuer_id
     seller_id = initiator_id if order_details["side"] == "bids" else issuer_id
 
-    to_update.inventory_updates[buyer_id]["USD"] -= trade_price * trade_quantity
-    to_update.inventory_updates[seller_id]["USD"] += trade_price * trade_quantity
+    executor.cash_update[buyer_id] -= trade_price * trade_quantity
+    executor.cash_update[seller_id] += trade_price * trade_quantity
 
-    to_update.inventory_updates[buyer_id][order_details["security"]] += trade_quantity
-    to_update.inventory_updates[seller_id][order_details["security"]] -= trade_quantity
+    executor.inventory_update[buyer_id] += trade_quantity
+    executor.inventory_update[seller_id] -= trade_quantity
 
     return trade_quantity, trade_price

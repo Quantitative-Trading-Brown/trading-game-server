@@ -1,9 +1,9 @@
 import json
 
-from ..services import *
+from app.services import *
 
 
-def make_snapshot(game_id, player_id=None):
+def get_snapshot(game_id, player_id=None):
     securities = extract(r.smembers(f"game:{game_id}:securities"))
 
     orderbooks = {
@@ -22,7 +22,6 @@ def make_snapshot(game_id, player_id=None):
     ]
 
     snapshot = {
-        "game_state": r.get(f"game:{game_id}:state"),
         "game_props": r.hgetall(f"game:{game_id}"),
         "securities": security_props,
         "orderbooks": orderbooks,
@@ -30,10 +29,15 @@ def make_snapshot(game_id, player_id=None):
     }
 
     if player_id is not None:
-        oids = extract(r.smembers(f"user:{player_id}:orders"))
+        oids = extract(r.smembers(f"player:{player_id}:orders"))
 
-        snapshot["username"] = r.hget(f"user:{player_id}", "username")
-        snapshot["inventory"] = r.hgetall(f"user:{player_id}:inventory")
-        snapshot["orders"] = {oid: r.hgetall(f"game:{game_id}:order:{oid}") for oid in oids}
+        snapshot["username"] = r.hget(f"player:{player_id}", "username")
+        snapshot["inventory"] = r.hgetall(f"player:{player_id}:inventory")
+        snapshot["cash"] = r.get(f"player:{player_id}:inventory:cash")
+        snapshot["position_value"] = r.get(f"player:{player_id}:inventory:position_value")
+        snapshot["margin"] = r.get(f"player:{player_id}:inventory:margin")
+        snapshot["orders"] = {
+            oid: r.hgetall(f"game:{game_id}:order:{oid}") for oid in oids
+        }
 
     return snapshot
