@@ -12,3 +12,4 @@ pip==25.3
 pyinstaller==6.13.0
 types-redis==4.6.0.20241004
 valkey==6.1.0
+gunicorn
