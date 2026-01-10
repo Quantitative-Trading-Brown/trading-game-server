@@ -6,7 +6,7 @@ from app.bots.bot_manager import BotManager
 
 from app.state import states
 from app.state.live import margin, positions, prices
-from app.communication import tick_flush
+from app.communication import tick_flush, snapshot
 
 
 class GameSetup:
@@ -36,13 +36,30 @@ class GameSetup:
             r.hset(f"game:{self.game_id}", "tick_length", self.tick_length)
             r.hset(f"game:{self.game_id}", "initial_cash", self.initial_cash)
 
+            for player_id in extract(r.smembers(f"game:{self.game_id}:players")):
+                r.set(
+                    f"player:{player_id}:inventory:cash",
+                    str(self.initial_cash),
+                )
+
     def apply_socketio(self):
         socketio.emit(
-            "securities_update", self.securities, namespace="/admin", to=self.game_id
+            "snapshot",
+            snapshot.get_snapshot(self.game_id),
+            namespace="/admin",
+            to=self.game_id,
         )
-        socketio.emit(
-            "securities_update", self.securities, namespace="/player", to=self.game_id
-        )
+        for player_id in extract(r.smembers(f"game:{self.game_id}:players")):
+            trader_sid = extract(r.hget(f"player:{player_id}", "sid"))
+            if trader_sid is None:
+                continue
+
+            socketio.emit(
+                "snapshot",
+                snapshot.get_snapshot(self.game_id, player_id),
+                namespace="/player",
+                to=trader_sid,
+            )
 
     def start_clock(self):
         def tick_jobs():

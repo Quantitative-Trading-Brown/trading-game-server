@@ -13,8 +13,4 @@ def get_leaderboard(game_id):
 
     leaderboard = sorted(results, key=lambda x: x[1], reverse=True)
 
-    named_rankings = [
-        (extract(r.hget(f"player:{player_id}", "username")), score)
-        for player_id, score in results
-    ]
-    return named_rankings
+    return leaderboard

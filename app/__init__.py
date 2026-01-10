@@ -54,6 +54,6 @@ def create_app(test_config=None):
 
             from .state import states
 
-            states.setup_to_live(game_id, "SP")
+            states.setup_to_live(game_id, "SP", True)
 
     return app

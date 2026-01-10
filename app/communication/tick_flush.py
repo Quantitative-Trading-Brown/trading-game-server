@@ -6,7 +6,7 @@ from app.services import *
 def flush(game_id: str, securities: dict) -> None:
     # Should flush tick-based updates to the player
 
-    # Combine and emit orderbook updates
+    # Combine and emit orderbook/price updates
     with r.lock("everything"):
         total_update = {}
         for sec_id in securities:
@@ -22,9 +22,14 @@ def flush(game_id: str, securities: dict) -> None:
             total_update[sec_id] = combined
             r.delete(ob_key)
 
+        prices = r.hgetall(f"game:{game_id}:securities:prices")
+
         # Emit combined orderbook updates
         socketio.emit("orderbook", total_update, namespace="/player", to=game_id)
         socketio.emit("orderbook", total_update, namespace="/admin", to=game_id)
+
+        socketio.emit("prices", prices, namespace="/player", to=game_id)
+        socketio.emit("prices", prices, namespace="/admin", to=game_id)
 
     # Emit inventory equity updates
     with r.lock("everything"):

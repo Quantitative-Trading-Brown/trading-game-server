@@ -25,7 +25,7 @@ def set_state(game_id: str, state: int) -> None:
     socketio.emit("gamestate_update", state, namespace="/player", to=game_id)
 
 
-def setup_to_live(game_id: str, preset) -> None:
+def setup_to_live(game_id: str, preset, allow_join: bool) -> None:
     if get_state(game_id) != State.SETUP:
         return
 
@@ -35,6 +35,7 @@ def setup_to_live(game_id: str, preset) -> None:
     if data is None:
         return
 
+    r.hset(f"game:{game_id}", "allow_join", str(int(allow_join)))
     game_setup = setup.GameSetup(
         game_id, os.path.join(current_app.instance_path, "presets", data["file"])
     )
@@ -57,4 +58,5 @@ def settlement_to_results(game_id, true_prices):
     if get_state(game_id) != State.SETTLEMENT:
         return
 
+    settlement.calculate_scores(game_id, true_prices)
     set_state(game_id, State.RESULTS)

@@ -1,4 +1,6 @@
+from numpy.char import join
 from app.services import *
+from app.state.states import get_state
 from . import tokens
 
 
@@ -37,6 +39,10 @@ def join_game(data):
     if game_id is None:
         return False, "Game not found"
 
+    join_allowed = int(extract(r.hget(f"game:{game_id}", "allow_join")) or 1)
+    if get_state(game_id) != 0 and join_allowed != 1:
+        return False, "Game in progress. Joining not allowed."
+
     # Check if username is empty
     if not username:
         return False, "Username cannot be empty"
@@ -56,9 +62,12 @@ def join_game(data):
     r.hset(f"player:{player_id}", "game_id", game_id)
     r.hset(f"player_tokens", str(player_id), player_token)
     r.sadd(f"game:{game_id}:players", str(player_id))
-    r.set(
-        f"player:{player_id}:inventory:cash",
-        extract(r.hget(f"game:{game_id}", "initial_cash")),
-    )
+
+    if get_state(game_id) == 1:
+        # If game is live, initialize player inventory with initial cash
+        r.set(
+            f"player:{player_id}:inventory:cash",
+            extract(r.hget(f"game:{game_id}", "initial_cash")),
+        )
 
     return True, player_token

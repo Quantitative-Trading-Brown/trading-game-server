@@ -9,9 +9,9 @@ blueprint = Blueprint("controls", __name__)
 
 
 @socketio.on("startgame", namespace="/admin")
-def start_game(preset):
+def start_game(preset, allow_join):
     game_id, _ = identity.identify(sid(request))
-    states.setup_to_live(game_id, preset)
+    states.setup_to_live(game_id, preset, allow_join)
 
 
 @socketio.on("endgame", namespace="/admin")

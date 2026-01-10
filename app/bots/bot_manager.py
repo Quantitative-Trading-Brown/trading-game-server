@@ -28,12 +28,10 @@ class BotManager:
                     self.active_bots[bot["security"]].append(
                         TimeSeriesBot(series, settings["width"])
                     )
-                    break
                 case "flat":
                     self.active_bots[bot["security"]].append(
                         FlatBot(settings["price_level"], settings["width"])
                     )
-                    break
                 case "sinewave":
                     self.active_bots[bot["security"]].append(
                         SinewaveBot(
@@ -42,7 +40,6 @@ class BotManager:
                             settings["frequency"],
                         )
                     )
-                    break
 
     def run_bots(self, cur_tick):
         self.bot_cancel_all()

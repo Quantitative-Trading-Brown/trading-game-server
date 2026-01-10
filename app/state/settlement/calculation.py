@@ -12,6 +12,5 @@ def calculate_scores(game_id: str, true_prices: dict) -> None:
             score += float(true_prices[sec_id]) * float(player_inv[sec_id])
 
         score += float(extract(r.get(f"player:{player_id}:inventory:cash")))
-        score += float(extract(r.get(f"player:{player_id}:inventory:reserve")))
 
-        r.hset(f"player:{player_id}", round(score, 2))
+        r.hset(f"player:{player_id}", "score", round(score, 2))
