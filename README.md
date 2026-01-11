@@ -1,10 +1,6 @@
 # Trading Game Server
 
 ## Todo
-- ~~Implement preset JSON loading~~
-- Document the preset JSON and CSVs
-- ~~Implement local IP detection through Firebase~~
-- ~~Implement liquidation rules and bankruptcy~~
 - Keyboard shortcuts
 - Research smoothing for bot impact on orderbook
   - Just use 100% aggressiveness for now
