@@ -5,6 +5,7 @@ from .bankruptcy import handle_bankruptcy
 
 def check_margin(game_id: str):
     active_players = extract(r.smembers(f"game:{game_id}:active_players"))
+    allowed_ticks = int(extract(r.hget(f"game:{game_id}", "margin_call_ticks")))
 
     prices = r.hgetall(f"game:{game_id}:securities:prices")
 
@@ -13,7 +14,7 @@ def check_margin(game_id: str):
             warning_ticks = int(
                 extract(r.hincrby(f"player:{player_id}", "warning_ticks"))
             )
-            if warning_ticks >= 3:
+            if warning_ticks >= allowed_ticks:
                 execute_margin_call(game_id, player_id)
         else:
             r.hset(f"player:{player_id}", "warning_ticks", "0")
