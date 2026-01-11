@@ -16,16 +16,16 @@
 ## Game Rules
 
 ### Margin Constraints
-We limit positions based on the comparison between equity (cash + position value) and gross exposure. Gross exposure for each asset
+Positions are limited based on the comparison between equity (cash + position value) and gross exposure. Gross exposure for each asset
 is scaled according to the long_margin and short_margin settings in preset json.
 
-If this margin exceeds equity for more than some customizable number of game ticks, set off liquidation (market order the user's entire inventory).
-If, after liquidation, the user is still negative cash, a "margin call" occurs.
+If this margin exceeds equity for more than some customizable number of game ticks, set off liquidation (market order the player's entire inventory).
+If, after liquidation, the player still does not have enough money to cover their positions (equity < margin), a bankruptcy occurs.
 
-### Margin Call
-When you receive a margin call, a popup will appear asking to confirm injection of more cash (initial cash). This allows you to continue trading,
-but you will be ranked strictly below users who did not get margin called. If you get margin called more than a customizable number of times,
-you will be kicked out of the game.
+### Bankruptcy
+When you go bankrupt, a popup will appear asking to confirm injection of more cash (initial cash). This resets the player's cash to the starting cash amount and 
+allows the player to continue trading, but they will be ranked strictly below users who did not go bankrupt. If bankruptcy occurs more than a customizable number of times,
+the player will be kicked out of the game.
 
 ## Configuration
 ### presets.json
