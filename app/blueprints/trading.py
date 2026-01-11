@@ -21,8 +21,10 @@ blueprint = Blueprint("trading", __name__)
 @socketio.on("market_order", namespace="/player")
 def market_order(sec_id, side, quantity):
     game_id, issuer_id = identity.identify(sid(request))
-    exc_qty = max(1, int(quantity))
+    if r.hget(f"player:{issuer_id}", "active") != "1":
+        return
 
+    exc_qty = max(1, int(quantity))
     with r.lock("everything"):
         entry.process_market_order(game_id, issuer_id, sec_id, side, exc_qty)
 
@@ -30,6 +32,9 @@ def market_order(sec_id, side, quantity):
 @socketio.on("limit_order", namespace="/player")
 def limit_order(sec_id, side, price, quantity):
     game_id, issuer_id = identity.identify(sid(request))
+    if r.hget(f"player:{issuer_id}", "active") != "1":
+        return
+
     exc_price = max(0, int(price))
     exc_qty = max(1, int(quantity))
 
@@ -40,6 +45,8 @@ def limit_order(sec_id, side, price, quantity):
 @socketio.on("cancel", namespace="/player")
 def cancel(order_id):
     game_id, issuer_id = identity.identify(sid(request))
+    if r.hget(f"player:{issuer_id}", "active") != "1":
+        return
 
     with r.lock("everything"):
         cancellation.cancel_order(game_id, issuer_id, order_id)
@@ -48,6 +55,8 @@ def cancel(order_id):
 @socketio.on("cancel_all", namespace="/player")
 def cancel_all():
     game_id, issuer_id = identity.identify(sid(request))
+    if r.hget(f"player:{issuer_id}", "active") != "1":
+        return
 
     with r.lock("everything"):
         cancellation.cancel_all_orders(game_id, issuer_id)

@@ -19,6 +19,9 @@ class GameSetup:
         self.game_ticks = config.get("game_ticks", 100)
         self.tick_length = config.get("tick_length", 1)
         self.initial_cash = config.get("initial_cash", 100000)
+        self.margin_call_ticks = config.get("margin_call_ticks", 3)
+        self.allowed_bankruptcies = config.get("allowed_bankruptcies", 3)
+
         self.securities = config.get("securities", {})
         self.bot_manager = BotManager(game_id, config.get("bots", []))
 
@@ -32,9 +35,14 @@ class GameSetup:
                 r.sadd(f"game:{self.game_id}:securities", sec_id)
                 r.hset(f"game:{self.game_id}:security:{sec_id}", mapping=security)
 
-            r.hset(f"game:{self.game_id}", "game_ticks", self.game_ticks)
-            r.hset(f"game:{self.game_id}", "tick_length", self.tick_length)
-            r.hset(f"game:{self.game_id}", "initial_cash", self.initial_cash)
+            game_props = {
+                "game_ticks": self.game_ticks,
+                "tick_length": self.tick_length,
+                "initial_cash": self.initial_cash,
+                "allowed_bankruptcies": self.allowed_bankruptcies,
+                "margin_call_ticks": self.margin_call_ticks,
+            }
+            r.hset(f"game:{self.game_id}", mapping=game_props)
 
             for player_id in extract(r.smembers(f"game:{self.game_id}:players")):
                 r.set(
@@ -69,20 +77,21 @@ class GameSetup:
                 if cur_tick >= self.game_ticks:
                     states.live_to_settlement(self.game_id)
 
-                # 1. Run bots
-                self.bot_manager.run_bots(cur_tick)
+                with r.lock("everything"):
+                    # 1. Run bots
+                    self.bot_manager.run_bots(cur_tick)
 
-                # 2. Update prices
-                prices.update_all_prices(self.game_id)
+                    # 2. Update prices
+                    prices.update_all_prices(self.game_id)
 
-                # 3. Mark positions
-                positions.mark_all_positions(self.game_id)
+                    # 3. Mark positions
+                    positions.mark_all_positions(self.game_id)
 
-                # 4. Check margin calls / liquidations
-                margin.check_margin(self.game_id)
+                    # 4. Check margin calls / liquidations
+                    margin.check_margin(self.game_id)
 
-                # 5. Flush orderbook updates to clients
-                tick_flush.flush(self.game_id, self.securities)
+                    # 5. Flush orderbook updates to clients
+                    tick_flush.flush(self.game_id)
 
                 socketio.sleep(self.tick_length)
                 cur_tick += 1

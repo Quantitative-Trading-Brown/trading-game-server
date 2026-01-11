@@ -1,4 +1,3 @@
-from numpy.char import join
 from app.services import *
 from app.state.states import get_state
 from . import tokens
@@ -25,43 +24,36 @@ def create_game():
 
 
 def join_game(data):
-    game_codes = extract(r.hgetall("codes"))
+    validated, message = validate_join(data)
+    if not validated:
+        return False, message
 
-    if not data:
-        return False, "Invalid Request"
+    player_token = add_player(message, data.get("playerName"))
 
-    code = data.get("code")
-    username = data.get("playerName")
+    return True, player_token
 
-    # Check if game exists
-    game_id = game_codes.get(code)
 
-    if game_id is None:
-        return False, "Game not found"
-
-    join_allowed = int(extract(r.hget(f"game:{game_id}", "allow_join")) or 1)
-    if get_state(game_id) != 0 and join_allowed != 1:
-        return False, "Game in progress. Joining not allowed."
-
-    # Check if username is empty
-    if not username:
-        return False, "Username cannot be empty"
-
-    # Check if player name exists
-    player_ids = extract(r.smembers(f"game:{game_id}:players"))
-
-    usernames = [r.hget(f"player:{player_id}", "username") for player_id in player_ids]
-
-    if username in usernames:
-        return False, "Player name taken"
-
+def add_player(game_id, username):
     player_id = r.incr("player_count")
     player_token = tokens.generate_token(prefix=f"player-{player_id}-")
 
-    r.hset(f"player:{player_id}", "username", username)
-    r.hset(f"player:{player_id}", "game_id", game_id)
+    player_info = {
+        "username": username,
+        "game_id": game_id,
+        "warning_ticks": 0,
+        "bankruptcies": 0,
+        "active": 1,
+        "score": 0,
+    }
+    r.hset(f"player:{player_id}", mapping=player_info)
+
     r.hset(f"player_tokens", str(player_id), player_token)
+
     r.sadd(f"game:{game_id}:players", str(player_id))
+    r.sadd(f"game:{game_id}:active_players", str(player_id))
+
+    r.set(f"player:{player_id}:inventory:position_value", "0")
+    r.set(f"player:{player_id}:inventory:margin", "0")
 
     if get_state(game_id) == 1:
         # If game is live, initialize player inventory with initial cash
@@ -70,4 +62,35 @@ def join_game(data):
             extract(r.hget(f"game:{game_id}", "initial_cash")),
         )
 
-    return True, player_token
+    return player_token
+
+
+def validate_join(data):
+    if not data:
+        return False, "Invalid Request"
+
+    code = data.get("code")
+    username = data.get("playerName")
+
+    if not code or not username:
+        return False, "Missing required fields"
+
+    game_codes = extract(r.hgetall("codes"))
+    game_id = game_codes.get(code)
+
+    # Check if game exists
+    if game_id is None:
+        return False, "Game not found"
+
+    # Check if joining is allowed
+    join_allowed = int(extract(r.hget(f"game:{game_id}", "allow_join")) or 1)
+    if get_state(game_id) != 0 and join_allowed != 1:
+        return False, "Game in progress. Joining not allowed."
+
+    # Check if player name exists
+    player_ids = extract(r.smembers(f"game:{game_id}:players"))
+    usernames = [r.hget(f"player:{player_id}", "username") for player_id in player_ids]
+    if username in usernames:
+        return False, "Player name taken"
+
+    return True, game_id

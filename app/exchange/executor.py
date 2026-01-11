@@ -114,6 +114,9 @@ class Executor:
                 r.hincrby(orderbook_key, str(price), qty_change)
             )
 
+            if orderbook_new_vals[price] == 0:
+                r.hdel(orderbook_key, str(price))
+
         r.rpush(
             f"game:{self.game_id}:security:{self.security}:orderbook:updates",
             json.dumps(orderbook_new_vals),
@@ -152,9 +155,7 @@ class Executor:
                 r.get(f"player:{trader_id}:inventory:position_value")
             )
 
-            margin = extract(
-                r.get(f"player:{trader_id}:inventory:margin")
-            )
+            margin = extract(r.get(f"player:{trader_id}:inventory:margin"))
 
             trader_sid = r.hget(f"player:{trader_id}", "sid")
             socketio.emit(

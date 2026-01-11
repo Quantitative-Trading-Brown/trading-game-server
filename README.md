@@ -18,8 +18,13 @@
 We limit positions based on the comparison between equity (cash + position value) and gross exposure. Gross exposure for each asset
 is scaled according to the long_margin and short_margin settings in preset json.
 
-If this margin exceeds equity for more than some customizable number of game ticks, we should set off liquidation.
+If this margin exceeds equity for more than some customizable number of game ticks, set off liquidation (market order the user's entire inventory).
+If, after liquidation, the user is still negative cash, a "margin call" occurs.
 
+## Margin Call
+When you receive a margin call, a popup will appear asking to confirm injection of more cash (initial cash). This allows you to continue trading,
+but you will be ranked strictly below users who did not get margin called. If you get margin called more than a customizable number of times,
+you will be kicked out of the game.
 
 ## Valkey Key Documentation
 

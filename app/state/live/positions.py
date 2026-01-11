@@ -33,10 +33,10 @@ def mark_player_positions(
 
 
 def mark_all_positions(game_id):
-    players = extract(r.smembers(f"game:{game_id}:players"))
+    active_players = extract(r.smembers(f"game:{game_id}:active_players"))
     prices = extract(r.hgetall(f"game:{game_id}:securities:prices"))
 
-    for player_id in players:
+    for player_id in active_players:
         mark_player_positions(
             game_id,
             player_id,

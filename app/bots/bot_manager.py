@@ -54,19 +54,16 @@ class BotManager:
     def bot_order(self, security, order_side, price, quantity):
         trader_id = f"_bot_{self.game_id}"
 
-        with r.lock("everything"):
-            entry.process_limit_order(
-                self.game_id, trader_id, security, order_side, price, quantity
-            )
+        entry.process_limit_order(
+            self.game_id, trader_id, security, order_side, price, quantity
+        )
 
     def bot_cancel(self, order_id):
         trader_id = f"_bot_{self.game_id}"
 
-        with r.lock("everything"):
-            cancellation.cancel_order(self.game_id, trader_id, order_id)
+        cancellation.cancel_order(self.game_id, trader_id, order_id)
 
     def bot_cancel_all(self):
         trader_id = f"_bot_{self.game_id}"
 
-        with r.lock("everything"):
-            cancellation.cancel_all_orders(self.game_id, trader_id)
+        cancellation.cancel_all_orders(self.game_id, trader_id)

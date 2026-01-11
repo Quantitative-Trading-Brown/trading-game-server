@@ -44,11 +44,11 @@ class TimeSeriesBot:
         # If to_hit is positive, orderbook has bad orders on bid side
         if to_hit > 0:
             return [
-                ("ask", current_ask, abs(to_hit) + min(random.randint(1,10), 10 - abs(cur_asks))),
-                ("bid", current_bid, min(random.randint(1,10), 10 - abs(cur_bids))),
+                ("ask", current_ask, abs(to_hit) + 10000),
+                ("bid", current_bid, 10000),
             ]
         else:
             return [
-                ("bid", current_bid, abs(to_hit) + min(random.randint(1,10), 10 - abs(cur_bids))),
-                ("ask", current_ask, min(random.randint(1,10), 10 - abs(cur_asks))),
+                ("bid", current_bid, abs(to_hit) + 10000),
+                ("ask", current_ask, 10000),
             ]

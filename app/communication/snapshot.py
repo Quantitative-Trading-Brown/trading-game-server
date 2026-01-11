@@ -34,10 +34,13 @@ def get_snapshot(game_id, player_id=None):
         snapshot["username"] = r.hget(f"player:{player_id}", "username")
         snapshot["inventory"] = r.hgetall(f"player:{player_id}:inventory")
         snapshot["cash"] = r.get(f"player:{player_id}:inventory:cash")
-        snapshot["position_value"] = r.get(f"player:{player_id}:inventory:position_value")
+        snapshot["position_value"] = r.get(
+            f"player:{player_id}:inventory:position_value"
+        )
         snapshot["margin"] = r.get(f"player:{player_id}:inventory:margin")
         snapshot["orders"] = {
             oid: r.hgetall(f"game:{game_id}:order:{oid}") for oid in oids
         }
+        snapshot["active"] = r.hget(f"player:{player_id}", "active")
 
     return snapshot
