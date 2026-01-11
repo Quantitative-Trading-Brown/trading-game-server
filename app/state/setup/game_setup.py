@@ -1,12 +1,13 @@
 import json, os
 import numpy as np
+import pandas as pd
 
 from app.services import *
 from app.bots.bot_manager import BotManager
 
 from app.state import states
 from app.state.live import margin, positions, prices
-from app.communication import tick_flush, snapshot
+from app.communication import tick_flush, snapshot, broadcast
 
 
 class GameSetup:
@@ -23,7 +24,10 @@ class GameSetup:
         self.allowed_bankruptcies = config.get("allowed_bankruptcies", 3)
 
         self.securities = config.get("securities", {})
-        self.bot_manager = BotManager(game_id, config.get("bots", []))
+        self.tick_data = pd.read_csv(
+            os.path.join(current_app.instance_path, config.get("tick_data", ""))
+        )
+        self.bot_manager = BotManager(game_id, self.tick_data, config.get("bots", {}))
 
     def apply(self):
         self.apply_redis()
@@ -92,6 +96,11 @@ class GameSetup:
 
                     # 5. Flush orderbook updates to clients
                     tick_flush.flush(self.game_id)
+
+                    # 6. Broadcast news to clients
+                    news = self.tick_data["news"][cur_tick]
+                    if isinstance(news, str) and news.strip() != "":
+                        broadcast.news(self.game_id, news)
 
                 socketio.sleep(self.tick_length)
                 cur_tick += 1

@@ -13,3 +13,4 @@ pyinstaller
 types-redis
 valkey
 gunicorn
+pandas

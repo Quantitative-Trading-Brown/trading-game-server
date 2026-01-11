@@ -1,14 +1,13 @@
 import random
 
 
-class TimeSeriesBot:
-    def __init__(self, series, width):
+class SkewedMM:
+    def __init__(self, data, settings):
         """
-        :param initial_fair_price: The internal fair price of the asset
-        :param aggressiveness: How fast the bot adjusts its quotes toward the fair price (0-1)
+        A simple market making bot that places bid and ask orders around a target price series.
         """
-        self.series = series
-        self.width = width
+        self.series = data[settings["col_name"]]
+        self.width = settings["width"]
 
     def count_bid_asks(
         self, orderbook: dict[str, float], price_low: float, price_high: float
@@ -44,11 +43,11 @@ class TimeSeriesBot:
         # If to_hit is positive, orderbook has bad orders on bid side
         if to_hit > 0:
             return [
-                ("ask", current_ask, abs(to_hit) + 10000),
+                ("ask", current_ask, abs(to_hit) + 4000),
                 ("bid", current_bid, 10000),
             ]
         else:
             return [
                 ("bid", current_bid, abs(to_hit) + 10000),
-                ("ask", current_ask, 10000),
+                ("ask", current_ask, 4000),
             ]
