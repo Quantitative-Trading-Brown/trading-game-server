@@ -13,6 +13,71 @@
   - Simple ETF basket arb
   - LTCM / Limitations of Arbitrage
 
+## Preset JSON
+### presets.json
+Outer level file containing description of all presets. Sample here:
+```json
+{
+    "ID": {
+      "name": "Name of preset",
+      "description": "Description of preset",
+      "file": "Preset configuration filename in instance/presets"
+    }
+    "NB": {
+        "name": "No Bots",
+        "description": "Game with no bots for testing",
+        "file": "manual.json"
+    },
+    "SP": {
+        "name": "S&P 500 and AAPL 2019-2024",
+        "description": "Uses a custom bot to track the time series of the S&P 500",
+        "file": "stocks.json"
+    }
+}
+```
+
+### presets
+```json
+{
+    "game_ticks": 1500,
+    "tick_length": 2,
+    "tick_data": "data/testing.csv",
+    "news_col": "news",
+    "initial_cash": 100000,
+    "allowed_bankruptcies": 2,
+    "margin_call_ticks": 2,
+    "securities": {
+        "SP500": {
+            "name": "S&P500",
+            "long_margin": 0.1,
+            "short_margin": 0.1
+        },
+        "AAPL": {
+            "name": "Apple",
+            "long_margin": 0.1,
+            "short_margin": 0.1
+        }
+    },
+    "bots": {
+        "sp500_mm": {
+            "type": "simple_mm",
+            "security": "SP500",
+            "settings": {
+                "price_col": "spindx_close",
+                "width": 2
+            }
+        },
+        "aapl_mm": {
+            "type": "simple_mm",
+            "security": "AAPL",
+            "settings": {
+                "price_col": "aapl_close",
+                "width": 2
+            }
+        }
+    }
+}
+```
 
 ## Margin Constraints
 We limit positions based on the comparison between equity (cash + position value) and gross exposure. Gross exposure for each asset
