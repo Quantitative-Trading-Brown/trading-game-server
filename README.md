@@ -36,7 +36,7 @@ Outer level file containing description of all presets. Sample here:
 }
 ```
 
-### presets
+### Preset File Example
 ```json
 {
     "game_ticks": 1500,
