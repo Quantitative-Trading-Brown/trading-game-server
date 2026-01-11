@@ -15,8 +15,8 @@
 
 ## Preset JSON
 ### presets.json
-Outer level file containing description of all presets. Sample here:
-```json
+File in the Flask app instance directory containing description of all presets. Sample here:
+```json title="instance/presets.json"
 {
     "ID": {
       "name": "Name of preset",
@@ -37,7 +37,8 @@ Outer level file containing description of all presets. Sample here:
 ```
 
 ### Preset File Example
-```json
+File in the Flask app instance/presets directory containing specific settings for a preset.
+```json title="instance/presets/stocks.json"
 {
     "game_ticks": 1500,
     "tick_length": 2,
