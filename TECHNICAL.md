@@ -27,6 +27,9 @@ Player ids count up from 0 independent of game. This means that if Game 1 has th
 - state -- current status of the game (0,1,2,3)
 - game_ticks -- length of game in ticks
 - tick_length -- length of one tick in seconds
+- initial_cash -- amount of cash each player starts with
+- margin_call_ticks -- number of warning ticks before player gets liquidated after equity < margin
+- allowed_bankruptcies -- number of bankruptcies before player gets eliminated
 
 *game:{game_id}:order_count* -- Number of orders placed this game (used to build order ids)
 
