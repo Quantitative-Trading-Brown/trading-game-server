@@ -50,9 +50,14 @@ File in the Flask app instance directory containing description of all presets. 
 }
 ```
 
-### Preset File Example
-File in the Flask app instance/presets directory containing specific settings for a preset.
-```json title="instance/presets/stocks.json"
+### Preset File
+
+Game presets are defined in JSON configuration files located in `instance/presets/`. These files control all aspects of game behavior, timing, securities, and bots.
+
+#### Example: Stock Trading Preset
+
+**`instance/presets/stocks.json`**
+```json
 {
     "game_ticks": 1500,
     "tick_length": 2,
@@ -92,6 +97,73 @@ File in the Flask app instance/presets directory containing specific settings fo
         }
     }
 }
+```
+
+#### Game Settings
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `game_ticks` | `number` | Total number of ticks in the game (1500 = game duration) |
+| `tick_length` | `number` | Duration of each tick in seconds |
+| `tick_data` | `string` | Path to CSV file containing historical market data |
+| `news_col` | `string` | Column name in CSV containing news/events |
+| `initial_cash` | `number` | Starting cash for each player (in USD) |
+| `allowed_bankruptcies` | `number` | Number of times a player can go bankrupt before elimination |
+| `margin_call_ticks` | `number` | Number of ticks before forced liquidation after margin call |
+
+#### Securities
+
+Each security in the `securities` object defines a tradeable asset:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Display name of the security |
+| `long_margin` | `number` | Margin requirement for long positions (0.1 = 10%) |
+| `short_margin` | `number` | Margin requirement for short positions (0.1 = 10%) |
+
+**Example:**
+```json
+"AAPL": {
+    "name": "Apple",
+    "long_margin": 0.1,
+    "short_margin": 0.1
+}
+```
+
+#### Bots (Market Makers)
+
+Bots provide liquidity by automatically placing orders. Each bot configuration includes:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `string` | Bot type (currently supports `"simple_mm"` for market maker) |
+| `security` | `string` | Security symbol the bot trades |
+| `settings.price_col` | `string` | CSV column containing reference prices |
+| `settings.width` | `number` | Spread width around reference price |
+
+**Example:**
+```json
+"sp500_mm": {
+    "type": "simple_mm",
+    "security": "SP500",
+    "settings": {
+        "price_col": "spindx_close",
+        "width": 2
+    }
+}
+```
+
+### Data File Format
+
+The CSV file specified in `tick_data` must include all the columns specified by parameters ending in `_col` above.
+It should have one row per game tick.
+
+**Example CSV structure:**
+```csv
+tick,spindx_close,aapl_close,news
+0,4500.00,150.25,"Market opens steady"
+1,4502.50,150.30,""
+2,4501.00,150.50,"Tech sector rallies"
 ```
 
 ## Valkey Key Documentation
