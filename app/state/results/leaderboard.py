@@ -6,8 +6,8 @@ def get_leaderboard(game_id):
     results = [
         (
             extract(r.hget(f"player:{player_id}", "username")),
-            extract(r.hget(f"player:{player_id}", "bankruptcies")),
-            extract(r.hget(f"player:{player_id}", "score")),
+            int(extract(r.hget(f"player:{player_id}", "bankruptcies"))),
+            float(extract(r.hget(f"player:{player_id}", "score"))),
         )
         for player_id in extract(r.smembers(f"game:{game_id}:players"))
     ]
