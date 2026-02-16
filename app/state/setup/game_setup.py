@@ -22,6 +22,8 @@ class GameSetup:
         self.initial_cash = config.get("initial_cash", 100000)
         self.margin_call_ticks = config.get("margin_call_ticks", 3)
         self.allowed_bankruptcies = config.get("allowed_bankruptcies", 3)
+        self.sell_liquidation_fraction = config.get("sell_liquidation_fraction", 0.5)
+        self.buy_liquidation_fraction = config.get("buy_liquidation_fraction", 1.5)
 
         self.securities = config.get("securities", {})
         self.tick_data = pd.read_csv(
@@ -45,6 +47,8 @@ class GameSetup:
                 "initial_cash": self.initial_cash,
                 "allowed_bankruptcies": self.allowed_bankruptcies,
                 "margin_call_ticks": self.margin_call_ticks,
+                "sell_liquidation_fraction": self.sell_liquidation_fraction,
+                "buy_liquidation_fraction": self.buy_liquidation_fraction,
             }
             r.hset(f"game:{self.game_id}", mapping=game_props)
 
