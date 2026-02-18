@@ -37,8 +37,8 @@ class SimpleMM:
 
         target_price = self.series[target_index]
 
-        current_bid = float(target_price - self.width - random.randint(0,4))
-        current_ask = float(target_price + self.width + random.randint(0,4))
+        current_bid = float(target_price - self.width * random.randint(1,3))
+        current_ask = float(target_price + self.width * random.randint(1,3))
 
         to_hit, cur_bids, cur_asks = self.count_bid_asks(
             orderbook, current_bid, current_ask
