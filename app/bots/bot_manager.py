@@ -15,6 +15,7 @@ class BotManager:
     def __init__(
         self, game_id: str, tick_data: pd.DataFrame, bot_configs: dict[str, Any]
     ):
+        print("SLDKJFLKSDJLFKJSDLJF")
         ts_path = os.path.join(current_app.instance_path, "")
         self.active_bots = {}
         self.game_id = game_id
