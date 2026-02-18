@@ -8,7 +8,6 @@ class SimpleMM:
         """
         self.series = data[settings["price_col"]]
         self.width = settings["width"]
-        print(self.width)
 
     def count_bid_asks(
         self, orderbook: dict[str, float], price_low: float, price_high: float
