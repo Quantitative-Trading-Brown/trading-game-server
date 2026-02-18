@@ -26,6 +26,8 @@ class BotManager:
             self.active_bots[name] = (config["security"], new_bot)
 
     def run_bots(self, cur_tick):
+        if cur_tick % 3 != 0:
+            return
         self.bot_cancel_all()
         for name, (security, bot) in self.active_bots.items():
             for quote in bot.place_orders(
