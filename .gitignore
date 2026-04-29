@@ -4,3 +4,7 @@ server-venv/
 .env/
 instance/
 credentials/
+backups/
+configs/
+target/
+trading-game-server
