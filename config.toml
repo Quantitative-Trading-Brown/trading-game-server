@@ -1,0 +1,16 @@
+[server]
+host = "0.0.0.0"
+port = 5000
+cors_origins = ["http://localhost:3000", "https://simulator.qtab.site"]
+debug = true
+
+[paths]
+data_dir = "configs"
+backup_dir = "backups"
+
+[firebase]
+upload = true
+credentials = "credentials/firebase-admin-key.json"
+doc = "localhost"
+name = "Localhost"
+address = "http://localhost:5000"
