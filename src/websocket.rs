@@ -195,6 +195,11 @@ fn dispatch_player_message(app: &AppState, player_id: &str, raw: &str) {
         None => return,
     };
 
+    // Update activity timestamp for reaper
+    if let Some(game) = state.games.get_mut(&game_id) {
+        game.touch();
+    }
+
     match msg.event.as_str() {
         "market_order" => {
             if !is_active(&state, player_id) {
@@ -272,6 +277,7 @@ fn dispatch_admin_message(app: &AppState, game_id: &str, raw: &str, cfg: &Config
 
             {
                 let mut state = app.lock().unwrap();
+                if let Some(g) = state.games.get_mut(game_id) { g.touch(); }
                 let ok =
                     game::setup_to_live(&mut state, game_id, &preset_id, allow_join, cfg);
                 if !ok {
@@ -285,6 +291,7 @@ fn dispatch_admin_message(app: &AppState, game_id: &str, raw: &str, cfg: &Config
         }
         "endgame" => {
             let mut state = app.lock().unwrap();
+            if let Some(g) = state.games.get_mut(game_id) { g.touch(); }
             game::live_to_settlement(&mut state, game_id);
             backup::save_backup(&state, game_id, &cfg.paths.backup_dir);
         }
@@ -297,6 +304,7 @@ fn dispatch_admin_message(app: &AppState, game_id: &str, raw: &str, cfg: &Config
 
             {
                 let mut state = app.lock().unwrap();
+                if let Some(g) = state.games.get_mut(game_id) { g.touch(); }
                 game::settlement_to_results(&mut state, game_id, &true_prices);
                 backup::save_backup(&state, game_id, &cfg.paths.backup_dir);
             }
@@ -321,6 +329,7 @@ fn dispatch_admin_message(app: &AppState, game_id: &str, raw: &str, cfg: &Config
             let message = msg.data["message"].as_str().unwrap_or_default();
             if !message.is_empty() {
                 let mut state = app.lock().unwrap();
+                if let Some(g) = state.games.get_mut(game_id) { g.touch(); }
                 game::broadcast_news(&mut state, game_id, message);
             }
         }

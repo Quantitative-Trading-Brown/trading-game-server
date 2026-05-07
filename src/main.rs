@@ -225,6 +225,9 @@ async fn main() {
     let state: AppState = Arc::new(Mutex::new(State::new()));
     let cfg = Arc::new(cfg);
 
+    // Start the background reaper for abandoned/expired games
+    game::start_reaper(state.clone());
+
     // CORS
     let origins: Vec<_> = cfg
         .server

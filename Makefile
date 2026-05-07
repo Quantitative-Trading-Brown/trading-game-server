@@ -1,4 +1,4 @@
-all: build-debug
+all: build-release
 
 build-release:
 	CARGO_HOME="${HOME}/.cargo" cargo build --release

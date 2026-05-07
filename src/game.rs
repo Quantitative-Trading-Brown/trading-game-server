@@ -104,6 +104,7 @@ pub fn join_game(
     state.players.insert(player_id.clone(), player);
 
     let game = state.games.get_mut(&game_id).unwrap();
+    game.touch();
     game.players.push(player_id.clone());
     game.active_players.insert(player_id);
 
@@ -727,13 +728,15 @@ pub fn build_leaderboard(state: &State, game_id: &str) -> serde_json::Value {
 // Game cleanup (free memory for finished games)
 // ---------------------------------------------------------------------------
 
+/// Remove a game and all associated player data from state.
+/// Works in any game phase (used by both scheduled cleanup and the reaper).
 pub fn cleanup_game(state: &mut State, game_id: &str) {
     let game = match state.games.get(game_id) {
-        Some(g) if g.phase == GamePhase::Results => g,
-        _ => return,
+        Some(g) => g,
+        None => return,
     };
 
-    // Remove player data
+    let phase = game.phase;
     let player_ids: Vec<String> = game.players.clone();
     let code = game.code.clone();
 
@@ -743,16 +746,15 @@ pub fn cleanup_game(state: &mut State, game_id: &str) {
         state.player_senders.remove(pid);
     }
 
-    // Remove game
     state.games.remove(game_id);
     state.codes.remove(&code);
     state.admin_senders.remove(game_id);
     state.admin_tokens.remove(game_id);
 
-    tracing::info!("Game {game_id} cleaned up");
+    tracing::info!("Game {game_id} cleaned up (was in phase {phase:?})");
 }
 
-/// Spawn a task that cleans up the game after a delay (e.g. 5 minutes after results).
+/// Spawn a task that cleans up the game after a delay (5 minutes after results).
 pub fn schedule_cleanup(
     app: std::sync::Arc<std::sync::Mutex<State>>,
     game_id: String,
@@ -761,6 +763,50 @@ pub fn schedule_cleanup(
         tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
         let mut state = app.lock().unwrap();
         cleanup_game(&mut state, &game_id);
+    });
+}
+
+/// Periodically scan for abandoned or expired games and clean them up.
+///
+/// - **Inactivity**: games with no player/admin activity for `MAX_INACTIVITY_SECS` (30 min).
+/// - **Max lifetime**: games older than `MAX_GAME_LIFETIME_SECS` (2 hours) regardless of activity.
+///
+/// Games in the Results phase are skipped here — they already have `schedule_cleanup`.
+pub fn start_reaper(app: std::sync::Arc<std::sync::Mutex<State>>) {
+    use crate::models::{MAX_GAME_LIFETIME_SECS, MAX_INACTIVITY_SECS};
+
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+
+            let mut state = app.lock().unwrap();
+            let now = std::time::Instant::now();
+
+            let game_ids: Vec<String> = state.games.keys().cloned().collect();
+            for gid in game_ids {
+                let game = match state.games.get(&gid) {
+                    Some(g) => g,
+                    None => continue,
+                };
+
+                // Results phase games are already scheduled for cleanup.
+                if game.phase == GamePhase::Results {
+                    continue;
+                }
+
+                let age = now.duration_since(game.created_at).as_secs();
+                let idle = now.duration_since(game.last_activity).as_secs();
+
+                if age >= MAX_GAME_LIFETIME_SECS {
+                    tracing::warn!("Reaping game {gid}: exceeded max lifetime ({age}s)");
+                    cleanup_game(&mut state, &gid);
+                } else if idle >= MAX_INACTIVITY_SECS {
+                    tracing::warn!("Reaping game {gid}: inactive for {idle}s");
+                    cleanup_game(&mut state, &gid);
+                }
+            }
+        }
     });
 }
 

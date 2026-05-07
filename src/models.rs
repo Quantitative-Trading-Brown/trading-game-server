@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::cmp::Reverse;
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
@@ -114,6 +115,11 @@ impl Default for GameConfig {
     }
 }
 
+/// Max time a game can exist regardless of activity (2 hours).
+pub const MAX_GAME_LIFETIME_SECS: u64 = 2 * 60 * 60;
+/// Max inactivity before a game is reaped (30 minutes).
+pub const MAX_INACTIVITY_SECS: u64 = 30 * 60;
+
 #[derive(Serialize, Deserialize)]
 pub struct Game {
     pub id: String,
@@ -130,10 +136,18 @@ pub struct Game {
     pub trades: Vec<Trade>,
     pub order_count: u64,
     pub orders: HashMap<String, Order>,
+
+    /// When the game was created.
+    #[serde(skip, default = "Instant::now")]
+    pub created_at: Instant,
+    /// Last time any player or admin interacted with this game.
+    #[serde(skip, default = "Instant::now")]
+    pub last_activity: Instant,
 }
 
 impl Game {
     pub fn new(id: String, code: String) -> Self {
+        let now = Instant::now();
         Self {
             id,
             code,
@@ -147,7 +161,14 @@ impl Game {
             trades: Vec::new(),
             order_count: 0,
             orders: HashMap::new(),
+            created_at: now,
+            last_activity: now,
         }
+    }
+
+    /// Update the last activity timestamp (call on any player/admin action).
+    pub fn touch(&mut self) {
+        self.last_activity = Instant::now();
     }
 
     pub fn next_order_id(&mut self) -> String {
